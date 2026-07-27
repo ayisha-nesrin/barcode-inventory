@@ -1,24 +1,29 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const { db } = require('./db-init');
+const { query } = require('./db-init');
 const router = express.Router();
 
-router.post('/login', (req, res) => {
-  const { username, password } = req.body || {};
-  if (!username || !password) {
-    return res.status(400).json({ error: 'Username and password required' });
+router.post('/login', async (req, res, next) => {
+  try {
+    const { username, password } = req.body || {};
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password required' });
+    }
+    const { rows } = await query('SELECT * FROM users WHERE username = $1', [username]);
+    const user = rows[0];
+    if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+      return res.status(401).json({ error: 'Invalid username or password' });
+    }
+    req.session.user = {
+      id: user.id,
+      username: user.username,
+      full_name: user.full_name,
+      role: user.role
+    };
+    res.json({ user: req.session.user });
+  } catch (err) {
+    next(err);
   }
-  const user = db.get('users').find({ username }).value();
-  if (!user || !bcrypt.compareSync(password, user.password_hash)) {
-    return res.status(401).json({ error: 'Invalid username or password' });
-  }
-  req.session.user = {
-    id: user.id,
-    username: user.username,
-    full_name: user.full_name,
-    role: user.role
-  };
-  res.json({ user: req.session.user });
 });
 
 router.post('/logout', (req, res) => {
