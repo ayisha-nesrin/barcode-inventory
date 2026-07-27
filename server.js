@@ -1,9 +1,14 @@
+// Load DATABASE_URL / SESSION_SECRET from a local .env file if one exists
+// (used only when running on your own computer - Render and other hosts
+// provide these as real environment variables instead, so this is a no-op
+// there).
+require('dotenv').config();
+
 const express = require('express');
 const path = require('path');
-const fs = require('fs');
 const session = require('express-session');
 
-require('./db-init'); // ensures db-data.json exists and default accounts/sample data are seeded
+const { initDB } = require('./db-init');
 
 const authRoutes = require('./auth-routes');
 const productRoutes = require('./product-routes');
@@ -14,9 +19,6 @@ const exportRoutes = require('./export-routes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -29,13 +31,11 @@ app.use(
   })
 );
 
-// Uploaded product photos
-app.use('/uploads', express.static(uploadsDir));
-
 // Front-end pages/assets are whitelisted explicitly (rather than a blanket
-// static folder) so the source code and db-data.json are never served.
+// static folder) so the source code is never served. Product photos are no
+// longer served from local disk - they live as data URLs inside the
+// database (see scan-routes.js), so there's no /uploads route anymore.
 const publicFiles = {
-  '/': 'login.html', // fallback, real redirect happens below
   '/login.html': 'login.html',
   '/scan.html': 'scan.html',
   '/admin.html': 'admin.html',
@@ -50,7 +50,6 @@ app.get('/', (req, res) => {
 });
 
 Object.entries(publicFiles).forEach(([route, file]) => {
-  if (route === '/') return;
   app.get(route, (req, res) => res.sendFile(path.join(__dirname, file)));
 });
 
@@ -68,15 +67,22 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Server error', detail: err.message });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log('');
-  console.log('=================================================');
-  console.log('  AEC Barcode Inventory System is running');
-  console.log('=================================================');
-  console.log(`  On this computer:  http://localhost:${PORT}`);
-  console.log(`  On your phone:     http://<this-computer-IP>:${PORT}`);
-  console.log('  (see README.md for how to find your IP and how');
-  console.log('   to enable phone camera access over the network)');
-  console.log('=================================================');
-  console.log('');
-});
+initDB()
+  .then(() => {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log('');
+      console.log('=================================================');
+      console.log('  AEC Barcode Inventory System is running');
+      console.log('=================================================');
+      console.log(`  On this computer:  http://localhost:${PORT}`);
+      console.log(`  On your phone:     http://<this-computer-IP>:${PORT}`);
+      console.log('  Database: connected to Postgres (DATABASE_URL)');
+      console.log('=================================================');
+      console.log('');
+    });
+  })
+  .catch((err) => {
+    console.error('Failed to connect to the database. Check your DATABASE_URL.');
+    console.error(err);
+    process.exit(1);
+  });
