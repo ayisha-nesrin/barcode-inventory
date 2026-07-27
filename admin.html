@@ -28,7 +28,7 @@
   .panel{background:#fff;border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.05);margin-bottom:20px;}
   .panel h2{margin:0 0 14px;font-size:16px;}
   .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center;}
-  .toolbar input, .toolbar select{padding:9px 10px;border:1px solid #d1d5db;border-radius:7px;font-size:13px;}
+  .toolbar input, .toolbar select{padding:9px 10px;border:1px solid #d1d5db;border-radius:7px;font-size:16px;}
   .toolbar input[type=text]{flex:1;min-width:160px;}
   .btn{padding:9px 14px;border:none;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;}
   .btn-primary{background:var(--blue);color:#fff;}
@@ -36,8 +36,9 @@
   .btn-danger{background:var(--red);color:#fff;}
   .btn-success{background:var(--green);color:#fff;}
   .btn-sm{padding:5px 9px;font-size:12px;}
-  table{width:100%;border-collapse:collapse;font-size:13px;}
-  th, td{text-align:left;padding:10px 8px;border-bottom:1px solid #f3f4f6;}
+  .table-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  table{width:100%;min-width:640px;border-collapse:collapse;font-size:13px;}
+  th, td{text-align:left;padding:10px 8px;border-bottom:1px solid #f3f4f6;white-space:nowrap;}
   th{color:#6b7280;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.03em;}
   tr:hover td{background:#fafbfc;}
   .thumb{width:38px;height:38px;object-fit:cover;border-radius:6px;background:#f3f4f6;}
@@ -48,7 +49,7 @@
   .modal{background:#fff;border-radius:12px;padding:24px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto;}
   .modal h3{margin:0 0 16px;}
   .modal label{display:block;font-size:12px;font-weight:600;color:#374151;margin:10px 0 5px;}
-  .modal input, .modal select, .modal textarea{width:100%;padding:9px 10px;border:1px solid #d1d5db;border-radius:7px;font-size:14px;font-family:inherit;}
+  .modal input, .modal select, .modal textarea{width:100%;padding:9px 10px;border:1px solid #d1d5db;border-radius:7px;font-size:16px;font-family:inherit;}
   .modal-actions{display:flex;gap:8px;margin-top:18px;}
   .hidden{display:none !important;}
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#111827;color:#fff;padding:12px 20px;border-radius:8px;font-size:14px;display:none;z-index:100;}
@@ -56,6 +57,21 @@
   .role-badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;}
   .role-admin{background:#ede9fe;color:#6d28d9;}
   .role-scanner{background:#dbeafe;color:#1d4ed8;}
+
+  @media (max-width: 640px) {
+    header{padding:12px 14px;flex-wrap:wrap;gap:8px;}
+    header .title{font-size:15px;}
+    nav{padding:0 10px;}
+    nav button{padding:12px 10px;font-size:13px;}
+    main{padding:12px;}
+    .panel{padding:14px;}
+    .stats{grid-template-columns:repeat(2, 1fr);gap:10px;}
+    .stat-card{padding:14px;}
+    .stat-card .num{font-size:21px;}
+    .toolbar{gap:8px;}
+    .toolbar input, .toolbar select{flex:1 1 auto;min-width:0;}
+    .modal{max-width:100%;margin:0 12px;}
+  }
 </style>
 </head>
 <body>
@@ -89,10 +105,12 @@
     </div>
     <div class="panel">
       <h2>Recent Scans</h2>
+      <div class="table-wrap">
       <table>
         <thead><tr><th>Date/Time</th><th>Barcode</th><th>Product</th><th>Scanned By</th><th>Device</th><th>Position</th></tr></thead>
         <tbody id="recentScansBody"></tbody>
       </table>
+      </div>
       <div class="empty hidden" id="recentScansEmpty">No scans yet.</div>
     </div>
   </section>
@@ -107,10 +125,12 @@
         <button class="btn btn-secondary" onclick="window.open('/api/export/products.xlsx')">Export Excel</button>
         <button class="btn btn-secondary" onclick="window.open('/api/export/products.pdf')">Export PDF</button>
       </div>
+      <div class="table-wrap">
       <table>
         <thead><tr><th></th><th>Barcode</th><th>Product Name</th><th>Position</th><th>Allocated User</th><th>Updated</th><th>Actions</th></tr></thead>
         <tbody id="productsBody"></tbody>
       </table>
+      </div>
       <div class="empty hidden" id="productsEmpty">No products found.</div>
     </div>
   </section>
@@ -128,10 +148,12 @@
         <button class="btn btn-secondary" onclick="window.open('/api/export/scans.xlsx')">Export Excel</button>
         <button class="btn btn-secondary" onclick="window.open('/api/export/scans.pdf')">Export PDF</button>
       </div>
+      <div class="table-wrap">
       <table>
         <thead><tr><th>Date</th><th>Time</th><th>Barcode</th><th>Product</th><th>Position</th><th>Allocated User</th><th>Scanned By</th><th>Device</th><th>Remarks</th></tr></thead>
         <tbody id="historyBody"></tbody>
       </table>
+      </div>
       <div class="empty hidden" id="historyEmpty">No scan history yet.</div>
     </div>
   </section>
@@ -153,10 +175,12 @@
     </div>
     <div class="panel">
       <h2>All Users</h2>
+      <div class="table-wrap">
       <table>
         <thead><tr><th>Username</th><th>Full Name</th><th>Role</th><th>Created</th><th>Actions</th></tr></thead>
         <tbody id="usersBody"></tbody>
       </table>
+      </div>
     </div>
   </section>
 
