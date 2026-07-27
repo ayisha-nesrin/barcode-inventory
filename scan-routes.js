@@ -18,6 +18,22 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage, limits: { fileSize: 8 * 1024 * 1024 } });
 
+// The server (e.g. Render) may run in UTC regardless of where your team is.
+// Always compute the displayed scan date/time in India Standard Time so the
+// records match what your staff actually see on their clocks.
+function getIST(date) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false
+  }).formatToParts(date).reduce((acc, p) => { acc[p.type] = p.value; return acc; }, {});
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    time: `${parts.hour}:${parts.minute}:${parts.second}`
+  };
+}
+
 router.use(requireLogin);
 
 // Record a scan. Creates the product if the barcode is new, otherwise
@@ -59,6 +75,7 @@ router.post('/', upload.single('photo'), (req, res) => {
     product = db.get('products').find({ barcode }).value();
   }
 
+  const ist = getIST(now);
   const scan = {
     id: nextId('nextScanId'),
     product_id: product.id,
@@ -67,8 +84,8 @@ router.post('/', upload.single('photo'), (req, res) => {
     scanned_by: req.session.user.username,
     device_name: device_name || 'Unknown device',
     device_id: device_id || 'unknown',
-    scan_date: iso.split('T')[0],
-    scan_time: now.toTimeString().split(' ')[0],
+    scan_date: ist.date,
+    scan_time: ist.time,
     position: product.position,
     allocated_user: product.allocated_user,
     remarks: remarks || '',
