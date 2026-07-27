@@ -1,5 +1,5 @@
 const express = require('express');
-const { db } = require('./db-init');
+const { query } = require('./db-init');
 const { requireLogin } = require('./auth-middleware');
 const router = express.Router();
 
@@ -15,34 +15,40 @@ function todayIST() {
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
-router.get('/', (req, res) => {
-  const products = db.get('products').value();
-  const scans = db.get('scans').value();
-  const today = todayIST();
-  const scansToday = scans.filter((s) => s.scan_date === today).length;
+router.get('/', async (req, res, next) => {
+  try {
+    const { rows: products } = await query('SELECT * FROM products');
+    const { rows: scans } = await query('SELECT * FROM scans ORDER BY id DESC');
+    const { rows: userCountRows } = await query('SELECT COUNT(*)::int AS count FROM users');
 
-  const byUser = {};
-  scans.forEach((s) => {
-    byUser[s.scanned_by] = (byUser[s.scanned_by] || 0) + 1;
-  });
+    const today = todayIST();
+    const scansToday = scans.filter((s) => s.scan_date === today).length;
 
-  const byPosition = {};
-  products.forEach((p) => {
-    const pos = p.position || 'Unassigned';
-    byPosition[pos] = (byPosition[pos] || 0) + 1;
-  });
+    const byUser = {};
+    scans.forEach((s) => {
+      byUser[s.scanned_by] = (byUser[s.scanned_by] || 0) + 1;
+    });
 
-  const recentScans = scans.slice().reverse().slice(0, 10);
+    const byPosition = {};
+    products.forEach((p) => {
+      const pos = p.position || 'Unassigned';
+      byPosition[pos] = (byPosition[pos] || 0) + 1;
+    });
 
-  res.json({
-    totalProducts: products.length,
-    totalScans: scans.length,
-    scansToday,
-    totalUsers: db.get('users').value().length,
-    byUser,
-    byPosition,
-    recentScans
-  });
+    const recentScans = scans.slice(0, 10);
+
+    res.json({
+      totalProducts: products.length,
+      totalScans: scans.length,
+      scansToday,
+      totalUsers: userCountRows[0].count,
+      byUser,
+      byPosition,
+      recentScans
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
 module.exports = router;
