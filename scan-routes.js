@@ -1,22 +1,24 @@
 const express = require('express');
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
-const { db, nextId } = require('./db-init');
+const { query } = require('./db-init');
 const { requireLogin } = require('./auth-middleware');
 const router = express.Router();
 
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadsDir),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname || '') || '.jpg';
-    cb(null, `product-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
-  }
+// Photos are kept small and stored as base64 directly in the database (as a
+// data: URL) instead of on local disk. This is what makes photos survive
+// server restarts/redeploys on hosts with no persistent disk (e.g. Render
+// free tier) - the database (Neon) is the only thing that needs to persist.
+// Kept deliberately small (3MB) since base64 inflates size ~33% and the
+// free Neon tier has a limited total storage budget.
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 3 * 1024 * 1024 }
 });
-const upload = multer({ storage, limits: { fileSize: 8 * 1024 * 1024 } });
+
+function fileToDataUrl(file) {
+  if (!file) return undefined;
+  return `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
+}
 
 // The server (e.g. Render) may run in UTC regardless of where your team is.
 // Always compute the displayed scan date/time in India Standard Time so the
@@ -39,72 +41,99 @@ router.use(requireLogin);
 // Record a scan. Creates the product if the barcode is new, otherwise
 // updates its position / allocated user / remarks / photo. Always logs
 // a row in the scan history with who/what device/when.
-router.post('/', upload.single('photo'), (req, res) => {
-  const { barcode, product_name, position, allocated_user, remarks, device_name, device_id } =
-    req.body || {};
-  if (!barcode) return res.status(400).json({ error: 'Barcode required' });
+router.post('/', upload.single('photo'), async (req, res, next) => {
+  try {
+    const { barcode, product_name, position, allocated_user, remarks, device_name, device_id } =
+      req.body || {};
+    if (!barcode) return res.status(400).json({ error: 'Barcode required' });
 
-  const now = new Date();
-  const iso = now.toISOString();
-  let product = db.get('products').find({ barcode }).value();
-  const image_path = req.file ? `/uploads/${req.file.filename}` : undefined;
+    const image_path = fileToDataUrl(req.file);
 
-  if (!product) {
-    if (!product_name) {
-      return res.status(400).json({ error: 'Product name required for a new product' });
+    const { rows: existingRows } = await query('SELECT * FROM products WHERE barcode = $1', [barcode]);
+    let product = existingRows[0];
+
+    if (!product) {
+      if (!product_name) {
+        return res.status(400).json({ error: 'Product name required for a new product' });
+      }
+      const { rows } = await query(
+        `INSERT INTO products (barcode, product_name, image_path, position, allocated_user, remarks)
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+        [barcode, product_name, image_path || null, position || '', allocated_user || '', remarks || '']
+      );
+      product = rows[0];
+    } else {
+      const fields = [];
+      const params = [];
+      function set(col, val) {
+        params.push(val);
+        fields.push(`${col} = $${params.length}`);
+      }
+      if (product_name) set('product_name', product_name);
+      if (position !== undefined) set('position', position);
+      if (allocated_user !== undefined) set('allocated_user', allocated_user);
+      if (image_path) set('image_path', image_path);
+      fields.push('updated_at = now()');
+
+      params.push(product.id);
+      const { rows } = await query(
+        `UPDATE products SET ${fields.join(', ')} WHERE id = $${params.length} RETURNING *`,
+        params
+      );
+      product = rows[0];
     }
-    product = {
-      id: nextId('nextProductId'),
-      barcode,
-      product_name,
-      image_path: image_path || null,
-      position: position || '',
-      allocated_user: allocated_user || '',
-      remarks: remarks || '',
-      created_at: iso,
-      updated_at: iso
-    };
-    db.get('products').push(product).write();
-  } else {
-    const updates = { updated_at: iso };
-    if (product_name) updates.product_name = product_name;
-    if (position !== undefined) updates.position = position;
-    if (allocated_user !== undefined) updates.allocated_user = allocated_user;
-    if (image_path) updates.image_path = image_path;
-    db.get('products').find({ barcode }).assign(updates).write();
-    product = db.get('products').find({ barcode }).value();
+
+    const ist = getIST(new Date());
+    const { rows: scanRows } = await query(
+      `INSERT INTO scans (product_id, barcode, product_name, scanned_by, device_name, device_id, scan_date, scan_time, position, allocated_user, remarks)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+      [
+        product.id, barcode, product.product_name,
+        req.session.user.username,
+        device_name || 'Unknown device',
+        device_id || 'unknown',
+        ist.date, ist.time,
+        product.position, product.allocated_user,
+        remarks || ''
+      ]
+    );
+
+    res.status(201).json({ product, scan: scanRows[0] });
+  } catch (err) {
+    next(err);
   }
-
-  const ist = getIST(now);
-  const scan = {
-    id: nextId('nextScanId'),
-    product_id: product.id,
-    barcode,
-    product_name: product.product_name,
-    scanned_by: req.session.user.username,
-    device_name: device_name || 'Unknown device',
-    device_id: device_id || 'unknown',
-    scan_date: ist.date,
-    scan_time: ist.time,
-    position: product.position,
-    allocated_user: product.allocated_user,
-    remarks: remarks || '',
-    created_at: iso
-  };
-  db.get('scans').push(scan).write();
-
-  res.status(201).json({ product, scan });
 });
 
 // Scan history with optional filters
-router.get('/', (req, res) => {
-  const { user, barcode, from, to } = req.query;
-  let list = db.get('scans').value();
-  if (user) list = list.filter((s) => s.scanned_by === user);
-  if (barcode) list = list.filter((s) => s.barcode.includes(barcode));
-  if (from) list = list.filter((s) => s.scan_date >= from);
-  if (to) list = list.filter((s) => s.scan_date <= to);
-  res.json({ scans: list.slice().reverse() });
+router.get('/', async (req, res, next) => {
+  try {
+    const { user, barcode, from, to } = req.query;
+    const clauses = [];
+    const params = [];
+
+    if (user) {
+      params.push(user);
+      clauses.push(`scanned_by = $${params.length}`);
+    }
+    if (barcode) {
+      params.push(`%${barcode}%`);
+      clauses.push(`barcode ILIKE $${params.length}`);
+    }
+    if (from) {
+      params.push(from);
+      clauses.push(`scan_date >= $${params.length}`);
+    }
+    if (to) {
+      params.push(to);
+      clauses.push(`scan_date <= $${params.length}`);
+    }
+
+    const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+    const { rows } = await query(`SELECT * FROM scans ${where} ORDER BY id DESC`, params);
+    res.json({ scans: rows });
+  } catch (err) {
+    next(err);
+  }
 });
 
 module.exports = router;
