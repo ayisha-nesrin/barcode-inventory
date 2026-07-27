@@ -1,0 +1,11 @@
+{
+  "name": "AEC Barcode Inventory Scanner",
+  "short_name": "AEC Scanner",
+  "start_url": "/scan.html",
+  "display": "standalone",
+  "background_color": "#f3f5f9",
+  "theme_color": "#1a56db",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

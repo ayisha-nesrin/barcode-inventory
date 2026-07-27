@@ -1,0 +1,141 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "username": "admin",
+      "password_hash": "$2a$10$orOKsFKwbHy73.idMjH9SeYvud9KFO.u3oSp18CeBu.OXvR.4Ep52",
+      "full_name": "System Administrator",
+      "role": "admin",
+      "created_at": "2026-07-24T10:23:46.772Z"
+    },
+    {
+      "id": 3,
+      "username": "AECGROUPIT",
+      "password_hash": "$2a$10$B7SwSMebO9urcWNsKqK24O6nP1G/o9vX7VnN1kTV.KQ56iC2fHDKW",
+      "full_name": "AYISHA NESRIN",
+      "role": "admin",
+      "created_at": "2026-07-24T10:31:55.878Z"
+    },
+    {
+      "id": 4,
+      "username": "AECGROUPSCANNER",
+      "password_hash": "$2a$10$pEHG.InEmgRw5PmsSZhRjOo0M710ihYa39ZXO.V9bNRTxYyoBhAgq",
+      "full_name": "AYISHA NESRIN",
+      "role": "scanner",
+      "created_at": "2026-07-24T10:35:37.409Z"
+    }
+  ],
+  "products": [
+    {
+      "id": 1,
+      "barcode": "8901234567890",
+      "product_name": "Dell Latitude 5420 Laptop",
+      "image_path": null,
+      "position": "Rack A-12",
+      "allocated_user": "John Smith",
+      "remarks": "IT Department asset",
+      "created_at": "2026-07-24T10:23:46.891Z",
+      "updated_at": "2026-07-24T10:23:46.891Z"
+    },
+    {
+      "id": 2,
+      "barcode": "8901234567891",
+      "product_name": "HP LaserJet Printer M404",
+      "image_path": null,
+      "position": "Rack B-04",
+      "allocated_user": "Sarah Lee",
+      "remarks": "",
+      "created_at": "2026-07-24T10:23:46.891Z",
+      "updated_at": "2026-07-24T10:23:46.891Z"
+    },
+    {
+      "id": 3,
+      "barcode": "8901234567892",
+      "product_name": "Logitech Wireless Mouse MX Master 3",
+      "image_path": null,
+      "position": "Shelf C-01",
+      "allocated_user": "Unassigned",
+      "remarks": "Spare stock",
+      "created_at": "2026-07-24T10:23:46.891Z",
+      "updated_at": "2026-07-24T10:23:46.891Z"
+    },
+    {
+      "id": 4,
+      "barcode": "8901234567893",
+      "product_name": "Cisco 24-Port Network Switch",
+      "image_path": null,
+      "position": "Server Room - Rack 2",
+      "allocated_user": "Network Team",
+      "remarks": "",
+      "created_at": "2026-07-24T10:23:46.891Z",
+      "updated_at": "2026-07-24T10:23:46.891Z"
+    }
+  ],
+  "scans": [
+    {
+      "id": 1,
+      "product_id": 1,
+      "barcode": "8901234567890",
+      "product_name": "Dell Latitude 5420 Laptop",
+      "scanned_by": "admin",
+      "device_name": "Samsung Galaxy S24 (Chrome)",
+      "device_id": "demo-device-1",
+      "scan_date": "2026-07-24",
+      "scan_time": "15:53:46",
+      "position": "Rack A-12",
+      "allocated_user": "John Smith",
+      "remarks": "Initial scan (demo data)",
+      "created_at": "2026-07-24T10:23:46.891Z"
+    },
+    {
+      "id": 2,
+      "product_id": 2,
+      "barcode": "8901234567891",
+      "product_name": "HP LaserJet Printer M404",
+      "scanned_by": "scanner1",
+      "device_name": "iPhone 15 (Safari)",
+      "device_id": "demo-device-2",
+      "scan_date": "2026-07-24",
+      "scan_time": "15:53:46",
+      "position": "Rack B-04",
+      "allocated_user": "Sarah Lee",
+      "remarks": "Initial scan (demo data)",
+      "created_at": "2026-07-24T10:23:46.891Z"
+    },
+    {
+      "id": 3,
+      "product_id": 3,
+      "barcode": "8901234567892",
+      "product_name": "Logitech Wireless Mouse MX Master 3",
+      "scanned_by": "admin",
+      "device_name": "Samsung Galaxy S24 (Chrome)",
+      "device_id": "demo-device-1",
+      "scan_date": "2026-07-24",
+      "scan_time": "15:53:46",
+      "position": "Shelf C-01",
+      "allocated_user": "Unassigned",
+      "remarks": "Initial scan (demo data)",
+      "created_at": "2026-07-24T10:23:46.891Z"
+    },
+    {
+      "id": 4,
+      "product_id": 4,
+      "barcode": "8901234567893",
+      "product_name": "Cisco 24-Port Network Switch",
+      "scanned_by": "scanner1",
+      "device_name": "iPhone 15 (Safari)",
+      "device_id": "demo-device-2",
+      "scan_date": "2026-07-24",
+      "scan_time": "15:53:46",
+      "position": "Server Room - Rack 2",
+      "allocated_user": "Network Team",
+      "remarks": "Initial scan (demo data)",
+      "created_at": "2026-07-24T10:23:46.891Z"
+    }
+  ],
+  "meta": {
+    "nextUserId": 5,
+    "nextProductId": 6,
+    "nextScanId": 5
+  }
+}

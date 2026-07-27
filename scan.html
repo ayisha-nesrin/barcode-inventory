@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>AEC Inventory - Scan</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#1a56db">
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  :root{--blue:#1a56db;--bg:#f3f5f9;--green:#16a34a;--red:#dc2626;}
+  *{box-sizing:border-box;}
+  body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);margin:0;padding-bottom:40px;}
+  header{background:var(--blue);color:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:10;}
+  header .title{font-weight:700;font-size:16px;}
+  header .userinfo{font-size:12px;opacity:.9;}
+  header a, header button{color:#fff;background:rgba(255,255,255,.18);border:none;padding:7px 11px;border-radius:6px;font-size:12px;text-decoration:none;cursor:pointer;}
+  main{max-width:480px;margin:0 auto;padding:16px;}
+  .card{background:#fff;border-radius:12px;box-shadow:0 4px 14px rgba(0,0,0,.06);padding:18px;margin-bottom:16px;}
+  #reader{width:100%;border-radius:10px;overflow:hidden;}
+  .btn{display:block;width:100%;padding:13px;border:none;border-radius:9px;font-size:15px;font-weight:600;cursor:pointer;margin-top:10px;}
+  .btn-primary{background:var(--blue);color:#fff;}
+  .btn-secondary{background:#e5e7eb;color:#111827;}
+  .btn-success{background:var(--green);color:#fff;}
+  .btn:disabled{opacity:.6;}
+  label{display:block;font-size:13px;font-weight:600;color:#374151;margin:12px 0 5px;}
+  input, textarea{width:100%;padding:10px 11px;border:1px solid #d1d5db;border-radius:8px;font-size:15px;font-family:inherit;}
+  textarea{resize:vertical;min-height:60px;}
+  .manual{display:flex;gap:8px;margin-top:12px;}
+  .manual input{flex:1;}
+  .manual button{padding:0 16px;border:none;border-radius:8px;background:var(--blue);color:#fff;font-weight:600;}
+  .badge{display:inline-block;font-size:11px;font-weight:700;padding:3px 8px;border-radius:20px;margin-bottom:8px;}
+  .badge.found{background:#dcfce7;color:var(--green);}
+  .badge.new{background:#fef9c3;color:#92400e;}
+  .prod-name{font-size:18px;font-weight:700;color:#111827;margin:4px 0;}
+  .prod-barcode{font-family:monospace;color:#6b7280;font-size:13px;margin-bottom:10px;}
+  .prod-img{width:100%;max-height:200px;object-fit:contain;border-radius:8px;background:#f3f4f6;margin-bottom:10px;}
+  .meta-row{display:flex;justify-content:space-between;font-size:13px;color:#4b5563;padding:5px 0;border-bottom:1px solid #f3f4f6;}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#111827;color:#fff;padding:12px 20px;border-radius:8px;font-size:14px;display:none;z-index:100;max-width:90%;text-align:center;}
+  .hidden{display:none !important;}
+  .device-info{font-size:11px;color:#9ca3af;margin-top:10px;text-align:center;}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="title">Barcode Scanner</div>
+    <div class="userinfo" id="userinfo"></div>
+  </div>
+  <div style="display:flex;gap:6px;">
+    <a href="/admin.html" id="adminLink" class="hidden">Admin</a>
+    <button id="logoutBtn">Logout</button>
+  </div>
+</header>
+
+<main>
+  <div class="card" id="scanCard">
+    <div id="reader"></div>
+    <button class="btn btn-primary" id="startBtn">Start Scanning</button>
+    <button class="btn btn-secondary hidden" id="stopBtn">Stop Camera</button>
+    <div class="manual">
+      <input type="text" id="manualBarcode" placeholder="Or type barcode manually">
+      <button id="manualBtn">Go</button>
+    </div>
+    <div class="device-info" id="deviceInfo"></div>
+  </div>
+
+  <div class="card hidden" id="foundCard">
+    <span class="badge found">Product Found</span>
+    <img class="prod-img hidden" id="foundImg" alt="Product photo">
+    <div class="prod-name" id="foundName"></div>
+    <div class="prod-barcode" id="foundBarcode"></div>
+    <div class="meta-row"><span>Last scanned</span><span id="foundLastScan">-</span></div>
+    <label>Position / Location</label>
+    <input type="text" id="foundPosition">
+    <label>Allocated User</label>
+    <input type="text" id="foundAllocated">
+    <label>Remarks</label>
+    <textarea id="foundRemarks" placeholder="Optional note for this scan"></textarea>
+    <label>Replace Photo (optional)</label>
+    <input type="file" id="foundPhoto" accept="image/*" capture="environment">
+    <button class="btn btn-success" id="logScanBtn">Save &amp; Log Scan</button>
+    <button class="btn btn-secondary" id="scanNextBtn1">Scan Next Item</button>
+  </div>
+
+  <div class="card hidden" id="newCard">
+    <span class="badge new">New Product</span>
+    <div class="prod-barcode" id="newBarcode"></div>
+    <label>Product Name *</label>
+    <input type="text" id="newName" required>
+    <label>Product Photo</label>
+    <input type="file" id="newPhoto" accept="image/*" capture="environment">
+    <label>Position / Location</label>
+    <input type="text" id="newPosition" placeholder="e.g. Rack A-12">
+    <label>Allocated User</label>
+    <input type="text" id="newAllocated" placeholder="e.g. John Smith">
+    <label>Remarks</label>
+    <textarea id="newRemarks"></textarea>
+    <button class="btn btn-success" id="saveNewBtn">Save New Product</button>
+    <button class="btn btn-secondary" id="scanNextBtn2">Cancel / Scan Next</button>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let currentUser = null;
+let html5QrCode = null;
+let scanning = false;
+let currentBarcode = null;
+
+function toast(msg, ok = true) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = ok ? '#111827' : '#dc2626';
+  t.style.display = 'block';
+  setTimeout(() => (t.style.display = 'none'), 2500);
+}
+
+function getDeviceId() {
+  let id = localStorage.getItem('aec_device_id');
+  if (!id) {
+    id = 'dev-' + Math.random().toString(36).substring(2, 10) + Date.now().toString(36);
+    localStorage.setItem('aec_device_id', id);
+  }
+  return id;
+}
+
+function getDeviceName() {
+  const ua = navigator.userAgent;
+  let name = 'Unknown Device';
+  if (/iPhone/.test(ua)) name = 'iPhone';
+  else if (/iPad/.test(ua)) name = 'iPad';
+  else if (/Android/.test(ua)) {
+    const m = ua.match(/Android.*?;\s([^;)]+)\)/);
+    name = m ? m[1].trim() : 'Android Device';
+  } else name = 'Desktop/Laptop';
+  let browser = 'Browser';
+  if (/CriOS|Chrome/.test(ua)) browser = 'Chrome';
+  else if (/Safari/.test(ua) && !/Chrome/.test(ua)) browser = 'Safari';
+  else if (/Firefox/.test(ua)) browser = 'Firefox';
+  return `${name} (${browser})`;
+}
+
+async function init() {
+  const res = await fetch('/api/auth/me');
+  if (!res.ok) {
+    window.location.href = '/login.html';
+    return;
+  }
+  const data = await res.json();
+  currentUser = data.user;
+  document.getElementById('userinfo').textContent = `${currentUser.full_name} (${currentUser.role})`;
+  if (currentUser.role === 'admin') document.getElementById('adminLink').classList.remove('hidden');
+  document.getElementById('deviceInfo').textContent = `Device: ${getDeviceName()}`;
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+  }
+}
+
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  await fetch('/api/auth/logout', { method: 'POST' });
+  window.location.href = '/login.html';
+});
+
+document.getElementById('startBtn').addEventListener('click', startScanning);
+document.getElementById('stopBtn').addEventListener('click', stopScanning);
+document.getElementById('manualBtn').addEventListener('click', () => {
+  const val = document.getElementById('manualBarcode').value.trim();
+  if (val) handleBarcode(val);
+});
+document.getElementById('manualBarcode').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    const val = e.target.value.trim();
+    if (val) handleBarcode(val);
+  }
+});
+
+function startScanning() {
+  document.getElementById('startBtn').classList.add('hidden');
+  document.getElementById('stopBtn').classList.remove('hidden');
+  html5QrCode = new Html5Qrcode('reader');
+  html5QrCode
+    .start(
+      { facingMode: 'environment' },
+      { fps: 10, qrbox: { width: 260, height: 160 } },
+      (decodedText) => handleBarcode(decodedText),
+      () => {}
+    )
+    .then(() => {
+      scanning = true;
+    })
+    .catch(() => {
+      toast('Camera error - check camera permissions', false);
+      document.getElementById('startBtn').classList.remove('hidden');
+      document.getElementById('stopBtn').classList.add('hidden');
+    });
+}
+
+function stopScanning() {
+  if (html5QrCode && scanning) {
+    html5QrCode.stop().then(() => html5QrCode.clear()).catch(() => {});
+    scanning = false;
+  }
+  document.getElementById('startBtn').classList.remove('hidden');
+  document.getElementById('stopBtn').classList.add('hidden');
+}
+
+async function handleBarcode(barcode) {
+  if (scanning) stopScanning();
+  currentBarcode = barcode;
+  document.getElementById('manualBarcode').value = '';
+
+  const res = await fetch('/api/products/' + encodeURIComponent(barcode));
+  document.getElementById('scanCard').classList.add('hidden');
+
+  if (res.ok) {
+    const data = await res.json();
+    showFound(data.product, data.lastScan);
+  } else {
+    showNew(barcode);
+  }
+}
+
+function showFound(product, lastScan) {
+  document.getElementById('newCard').classList.add('hidden');
+  document.getElementById('foundCard').classList.remove('hidden');
+  document.getElementById('foundName').textContent = product.product_name;
+  document.getElementById('foundBarcode').textContent = product.barcode;
+  document.getElementById('foundPosition').value = product.position || '';
+  document.getElementById('foundAllocated').value = product.allocated_user || '';
+  document.getElementById('foundRemarks').value = '';
+  const img = document.getElementById('foundImg');
+  if (product.image_path) {
+    img.src = product.image_path;
+    img.classList.remove('hidden');
+  } else {
+    img.classList.add('hidden');
+  }
+  document.getElementById('foundLastScan').textContent = lastScan
+    ? `${lastScan.scan_date} ${lastScan.scan_time} by ${lastScan.scanned_by}`
+    : 'Never';
+}
+
+function showNew(barcode) {
+  document.getElementById('foundCard').classList.add('hidden');
+  document.getElementById('newCard').classList.remove('hidden');
+  document.getElementById('newBarcode').textContent = barcode;
+  document.getElementById('newName').value = '';
+  document.getElementById('newPosition').value = '';
+  document.getElementById('newAllocated').value = '';
+  document.getElementById('newRemarks').value = '';
+}
+
+function resetToScan() {
+  document.getElementById('foundCard').classList.add('hidden');
+  document.getElementById('newCard').classList.add('hidden');
+  document.getElementById('scanCard').classList.remove('hidden');
+  currentBarcode = null;
+}
+
+document.getElementById('scanNextBtn1').addEventListener('click', resetToScan);
+document.getElementById('scanNextBtn2').addEventListener('click', resetToScan);
+
+async function submitScan(formFields, photoInputId, btnEl) {
+  const fd = new FormData();
+  fd.append('barcode', currentBarcode);
+  fd.append('device_name', getDeviceName());
+  fd.append('device_id', getDeviceId());
+  Object.entries(formFields).forEach(([k, v]) => fd.append(k, v));
+  const photoInput = document.getElementById(photoInputId);
+  if (photoInput.files[0]) fd.append('photo', photoInput.files[0]);
+
+  btnEl.disabled = true;
+  btnEl.textContent = 'Saving...';
+  try {
+    const res = await fetch('/api/scans', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok) {
+      toast(data.error || 'Save failed', false);
+      return;
+    }
+    toast('Saved successfully');
+    resetToScan();
+  } catch (err) {
+    toast('Network error', false);
+  } finally {
+    btnEl.disabled = false;
+    btnEl.textContent = btnEl.dataset.label;
+  }
+}
+
+const logBtn = document.getElementById('logScanBtn');
+logBtn.dataset.label = logBtn.textContent;
+logBtn.addEventListener('click', () => {
+  submitScan(
+    {
+      position: document.getElementById('foundPosition').value,
+      allocated_user: document.getElementById('foundAllocated').value,
+      remarks: document.getElementById('foundRemarks').value
+    },
+    'foundPhoto',
+    logBtn
+  );
+});
+
+const saveNewBtn = document.getElementById('saveNewBtn');
+saveNewBtn.dataset.label = saveNewBtn.textContent;
+saveNewBtn.addEventListener('click', () => {
+  const name = document.getElementById('newName').value.trim();
+  if (!name) {
+    toast('Product name is required', false);
+    return;
+  }
+  submitScan(
+    {
+      product_name: name,
+      position: document.getElementById('newPosition').value,
+      allocated_user: document.getElementById('newAllocated').value,
+      remarks: document.getElementById('newRemarks').value
+    },
+    'newPhoto',
+    saveNewBtn
+  );
+});
+
+init();
+</script>
+</body>
+</html>

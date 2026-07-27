@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AEC Inventory - Admin Panel</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#1a56db">
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+<style>
+  :root{--blue:#1a56db;--bg:#f3f5f9;--green:#16a34a;--red:#dc2626;--border:#e5e7eb;}
+  *{box-sizing:border-box;}
+  body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);margin:0;color:#111827;}
+  header{background:var(--blue);color:#fff;padding:14px 22px;display:flex;justify-content:space-between;align-items:center;}
+  header .title{font-weight:700;font-size:17px;}
+  header .userinfo{font-size:12px;opacity:.9;}
+  header a, header button{color:#fff;background:rgba(255,255,255,.18);border:none;padding:7px 12px;border-radius:6px;font-size:12px;text-decoration:none;cursor:pointer;margin-left:6px;}
+  nav{display:flex;gap:4px;background:#fff;padding:0 22px;border-bottom:1px solid var(--border);overflow-x:auto;}
+  nav button{background:none;border:none;padding:14px 16px;font-size:14px;font-weight:600;color:#6b7280;cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap;}
+  nav button.active{color:var(--blue);border-bottom-color:var(--blue);}
+  main{max-width:1100px;margin:0 auto;padding:22px;}
+  .tab{display:none;}
+  .tab.active{display:block;}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:20px;}
+  .stat-card{background:#fff;border-radius:12px;padding:18px;box-shadow:0 2px 8px rgba(0,0,0,.05);}
+  .stat-card .num{font-size:26px;font-weight:800;color:var(--blue);}
+  .stat-card .label{font-size:12px;color:#6b7280;margin-top:4px;}
+  .panel{background:#fff;border-radius:12px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,.05);margin-bottom:20px;}
+  .panel h2{margin:0 0 14px;font-size:16px;}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center;}
+  .toolbar input, .toolbar select{padding:9px 10px;border:1px solid #d1d5db;border-radius:7px;font-size:13px;}
+  .toolbar input[type=text]{flex:1;min-width:160px;}
+  .btn{padding:9px 14px;border:none;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;}
+  .btn-primary{background:var(--blue);color:#fff;}
+  .btn-secondary{background:#e5e7eb;color:#111827;}
+  .btn-danger{background:var(--red);color:#fff;}
+  .btn-success{background:var(--green);color:#fff;}
+  .btn-sm{padding:5px 9px;font-size:12px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th, td{text-align:left;padding:10px 8px;border-bottom:1px solid #f3f4f6;}
+  th{color:#6b7280;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.03em;}
+  tr:hover td{background:#fafbfc;}
+  .thumb{width:38px;height:38px;object-fit:cover;border-radius:6px;background:#f3f4f6;}
+  .thumb-empty{width:38px;height:38px;border-radius:6px;background:#f3f4f6;}
+  .actions{white-space:nowrap;}
+  .actions button{margin-right:4px;}
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:50;}
+  .modal{background:#fff;border-radius:12px;padding:24px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto;}
+  .modal h3{margin:0 0 16px;}
+  .modal label{display:block;font-size:12px;font-weight:600;color:#374151;margin:10px 0 5px;}
+  .modal input, .modal select, .modal textarea{width:100%;padding:9px 10px;border:1px solid #d1d5db;border-radius:7px;font-size:14px;font-family:inherit;}
+  .modal-actions{display:flex;gap:8px;margin-top:18px;}
+  .hidden{display:none !important;}
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#111827;color:#fff;padding:12px 20px;border-radius:8px;font-size:14px;display:none;z-index:100;}
+  .empty{color:#9ca3af;text-align:center;padding:30px;font-size:13px;}
+  .role-badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;}
+  .role-admin{background:#ede9fe;color:#6d28d9;}
+  .role-scanner{background:#dbeafe;color:#1d4ed8;}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="title">AEC Barcode Inventory — Admin Panel</div>
+    <div class="userinfo" id="userinfo"></div>
+  </div>
+  <div>
+    <a href="/scan.html">Scanner App</a>
+    <button id="logoutBtn">Logout</button>
+  </div>
+</header>
+
+<nav>
+  <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+  <button class="tab-btn" data-tab="products">Products</button>
+  <button class="tab-btn" data-tab="history">Scan History</button>
+  <button class="tab-btn" data-tab="users">Users</button>
+</nav>
+
+<main>
+
+  <!-- DASHBOARD -->
+  <section class="tab active" id="tab-dashboard">
+    <div class="stats">
+      <div class="stat-card"><div class="num" id="statProducts">-</div><div class="label">Total Products</div></div>
+      <div class="stat-card"><div class="num" id="statScans">-</div><div class="label">Total Scans</div></div>
+      <div class="stat-card"><div class="num" id="statScansToday">-</div><div class="label">Scans Today</div></div>
+      <div class="stat-card"><div class="num" id="statUsers">-</div><div class="label">Users</div></div>
+    </div>
+    <div class="panel">
+      <h2>Recent Scans</h2>
+      <table>
+        <thead><tr><th>Date/Time</th><th>Barcode</th><th>Product</th><th>Scanned By</th><th>Device</th><th>Position</th></tr></thead>
+        <tbody id="recentScansBody"></tbody>
+      </table>
+      <div class="empty hidden" id="recentScansEmpty">No scans yet.</div>
+    </div>
+  </section>
+
+  <!-- PRODUCTS -->
+  <section class="tab" id="tab-products">
+    <div class="panel">
+      <h2>Products</h2>
+      <div class="toolbar">
+        <input type="text" id="productSearch" placeholder="Search barcode, name, position, user...">
+        <button class="btn btn-primary" id="addProductBtn">+ Add Product</button>
+        <button class="btn btn-secondary" onclick="window.open('/api/export/products.xlsx')">Export Excel</button>
+        <button class="btn btn-secondary" onclick="window.open('/api/export/products.pdf')">Export PDF</button>
+      </div>
+      <table>
+        <thead><tr><th></th><th>Barcode</th><th>Product Name</th><th>Position</th><th>Allocated User</th><th>Updated</th><th>Actions</th></tr></thead>
+        <tbody id="productsBody"></tbody>
+      </table>
+      <div class="empty hidden" id="productsEmpty">No products found.</div>
+    </div>
+  </section>
+
+  <!-- SCAN HISTORY -->
+  <section class="tab" id="tab-history">
+    <div class="panel">
+      <h2>Scan History</h2>
+      <div class="toolbar">
+        <input type="text" id="historyBarcode" placeholder="Filter by barcode">
+        <select id="historyUser"><option value="">All Users</option></select>
+        <input type="date" id="historyFrom">
+        <input type="date" id="historyTo">
+        <button class="btn btn-primary" id="applyHistoryFilter">Filter</button>
+        <button class="btn btn-secondary" onclick="window.open('/api/export/scans.xlsx')">Export Excel</button>
+        <button class="btn btn-secondary" onclick="window.open('/api/export/scans.pdf')">Export PDF</button>
+      </div>
+      <table>
+        <thead><tr><th>Date</th><th>Time</th><th>Barcode</th><th>Product</th><th>Position</th><th>Allocated User</th><th>Scanned By</th><th>Device</th><th>Remarks</th></tr></thead>
+        <tbody id="historyBody"></tbody>
+      </table>
+      <div class="empty hidden" id="historyEmpty">No scan history yet.</div>
+    </div>
+  </section>
+
+  <!-- USERS -->
+  <section class="tab" id="tab-users">
+    <div class="panel">
+      <h2>Add User</h2>
+      <div class="toolbar">
+        <input type="text" id="newUserUsername" placeholder="Username">
+        <input type="text" id="newUserFullName" placeholder="Full name">
+        <input type="password" id="newUserPassword" placeholder="Password">
+        <select id="newUserRole">
+          <option value="scanner">Scanner</option>
+          <option value="admin">Admin</option>
+        </select>
+        <button class="btn btn-primary" id="addUserBtn">+ Add User</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>All Users</h2>
+      <table>
+        <thead><tr><th>Username</th><th>Full Name</th><th>Role</th><th>Created</th><th>Actions</th></tr></thead>
+        <tbody id="usersBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+</main>
+
+<!-- Edit Product Modal -->
+<div class="overlay hidden" id="editOverlay">
+  <div class="modal">
+    <h3>Edit Product</h3>
+    <div id="editBarcodeLabel" style="font-family:monospace;color:#6b7280;font-size:13px;margin-bottom:8px;"></div>
+    <label>Product Name</label>
+    <input type="text" id="editName">
+    <label>Position / Location</label>
+    <input type="text" id="editPosition">
+    <label>Allocated User</label>
+    <input type="text" id="editAllocated">
+    <label>Remarks</label>
+    <textarea id="editRemarks" rows="3"></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-success" id="saveEditBtn" style="flex:1;">Save</button>
+      <button class="btn btn-secondary" id="cancelEditBtn" style="flex:1;">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Product Modal -->
+<div class="overlay hidden" id="addOverlay">
+  <div class="modal">
+    <h3>Add Product</h3>
+    <label>Barcode</label>
+    <input type="text" id="addBarcode">
+    <label>Product Name</label>
+    <input type="text" id="addName">
+    <label>Position / Location</label>
+    <input type="text" id="addPosition">
+    <label>Allocated User</label>
+    <input type="text" id="addAllocated">
+    <label>Remarks</label>
+    <textarea id="addRemarks" rows="3"></textarea>
+    <div class="modal-actions">
+      <button class="btn btn-success" id="saveAddBtn" style="flex:1;">Save</button>
+      <button class="btn btn-secondary" id="cancelAddBtn" style="flex:1;">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Barcode Label Print Area (hidden, used only when printing) -->
+<div id="printLabelArea" class="hidden"></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let currentUser = null;
+let productsCache = [];
+
+function toast(msg, ok = true) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = ok ? '#111827' : '#dc2626';
+  t.style.display = 'block';
+  setTimeout(() => (t.style.display = 'none'), 2500);
+}
+
+async function api(url, opts) {
+  const res = await fetch(url, opts);
+  let data = {};
+  try { data = await res.json(); } catch (e) {}
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
+
+async function init() {
+  let me;
+  try {
+    me = await api('/api/auth/me');
+  } catch (e) {
+    window.location.href = '/login.html';
+    return;
+  }
+  currentUser = me.user;
+  if (currentUser.role !== 'admin') {
+    alert('Admin access required. Redirecting to scanner app.');
+    window.location.href = '/scan.html';
+    return;
+  }
+  document.getElementById('userinfo').textContent = `${currentUser.full_name} (${currentUser.role})`;
+
+  document.querySelectorAll('.tab-btn').forEach((btn) => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+  });
+
+  document.getElementById('logoutBtn').addEventListener('click', async () => {
+    await api('/api/auth/logout', { method: 'POST' });
+    window.location.href = '/login.html';
+  });
+
+  loadDashboard();
+  loadProducts();
+  loadUsers();
+
+  document.getElementById('productSearch').addEventListener('input', debounce(() => loadProducts(), 300));
+  document.getElementById('addProductBtn').addEventListener('click', () => openAddModal());
+  document.getElementById('applyHistoryFilter').addEventListener('click', loadHistory);
+  document.getElementById('addUserBtn').addEventListener('click', addUser);
+
+  document.getElementById('saveEditBtn').addEventListener('click', saveEdit);
+  document.getElementById('cancelEditBtn').addEventListener('click', closeEditModal);
+  document.getElementById('saveAddBtn').addEventListener('click', saveAdd);
+  document.getElementById('cancelAddBtn').addEventListener('click', closeAddModal);
+}
+
+function debounce(fn, ms) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+}
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('.tab').forEach((s) => s.classList.toggle('active', s.id === 'tab-' + tab));
+  if (tab === 'history') loadHistory();
+  if (tab === 'dashboard') loadDashboard();
+}
+
+// ---------- DASHBOARD ----------
+async function loadDashboard() {
+  const stats = await api('/api/stats');
+  document.getElementById('statProducts').textContent = stats.totalProducts;
+  document.getElementById('statScans').textContent = stats.totalScans;
+  document.getElementById('statScansToday').textContent = stats.scansToday;
+  document.getElementById('statUsers').textContent = stats.totalUsers;
+
+  const body = document.getElementById('recentScansBody');
+  body.innerHTML = '';
+  stats.recentScans.forEach((s) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${s.scan_date} ${s.scan_time}</td><td>${esc(s.barcode)}</td><td>${esc(s.product_name)}</td><td>${esc(s.scanned_by)}</td><td>${esc(s.device_name)}</td><td>${esc(s.position || '-')}</td>`;
+    body.appendChild(tr);
+  });
+  document.getElementById('recentScansEmpty').classList.toggle('hidden', stats.recentScans.length > 0);
+}
+
+// ---------- PRODUCTS ----------
+async function loadProducts() {
+  const q = document.getElementById('productSearch').value.trim();
+  const url = q ? `/api/products?q=${encodeURIComponent(q)}` : '/api/products';
+  const data = await api(url);
+  productsCache = data.products;
+  const body = document.getElementById('productsBody');
+  body.innerHTML = '';
+  data.products.forEach((p) => {
+    const tr = document.createElement('tr');
+    const img = p.image_path ? `<img class="thumb" src="${p.image_path}">` : `<div class="thumb-empty"></div>`;
+    tr.innerHTML = `
+      <td>${img}</td>
+      <td style="font-family:monospace">${esc(p.barcode)}</td>
+      <td>${esc(p.product_name)}</td>
+      <td>${esc(p.position || '-')}</td>
+      <td>${esc(p.allocated_user || '-')}</td>
+      <td>${new Date(p.updated_at).toLocaleDateString()}</td>
+      <td class="actions">
+        <button class="btn btn-secondary btn-sm" onclick="openEditModal(${p.id})">Edit</button>
+        <button class="btn btn-secondary btn-sm" onclick="printLabel(${p.id})">Label</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteProduct(${p.id})">Delete</button>
+      </td>`;
+    body.appendChild(tr);
+  });
+  document.getElementById('productsEmpty').classList.toggle('hidden', data.products.length > 0);
+}
+
+function openEditModal(id) {
+  const p = productsCache.find((x) => x.id === id);
+  if (!p) return;
+  document.getElementById('editOverlay').dataset.id = id;
+  document.getElementById('editBarcodeLabel').textContent = p.barcode;
+  document.getElementById('editName').value = p.product_name;
+  document.getElementById('editPosition').value = p.position || '';
+  document.getElementById('editAllocated').value = p.allocated_user || '';
+  document.getElementById('editRemarks').value = p.remarks || '';
+  document.getElementById('editOverlay').classList.remove('hidden');
+}
+function closeEditModal() { document.getElementById('editOverlay').classList.add('hidden'); }
+
+async function saveEdit() {
+  const id = document.getElementById('editOverlay').dataset.id;
+  try {
+    await api(`/api/products/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        product_name: document.getElementById('editName').value,
+        position: document.getElementById('editPosition').value,
+        allocated_user: document.getElementById('editAllocated').value,
+        remarks: document.getElementById('editRemarks').value
+      })
+    });
+    toast('Product updated');
+    closeEditModal();
+    loadProducts();
+  } catch (e) { toast(e.message, false); }
+}
+
+function openAddModal() {
+  document.getElementById('addBarcode').value = '';
+  document.getElementById('addName').value = '';
+  document.getElementById('addPosition').value = '';
+  document.getElementById('addAllocated').value = '';
+  document.getElementById('addRemarks').value = '';
+  document.getElementById('addOverlay').classList.remove('hidden');
+}
+function closeAddModal() { document.getElementById('addOverlay').classList.add('hidden'); }
+
+async function saveAdd() {
+  const barcode = document.getElementById('addBarcode').value.trim();
+  const product_name = document.getElementById('addName').value.trim();
+  if (!barcode || !product_name) { toast('Barcode and product name required', false); return; }
+  try {
+    await api('/api/products', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        barcode, product_name,
+        position: document.getElementById('addPosition').value,
+        allocated_user: document.getElementById('addAllocated').value,
+        remarks: document.getElementById('addRemarks').value
+      })
+    });
+    toast('Product added');
+    closeAddModal();
+    loadProducts();
+    loadDashboard();
+  } catch (e) { toast(e.message, false); }
+}
+
+async function deleteProduct(id) {
+  if (!confirm('Delete this product? This cannot be undone.')) return;
+  try {
+    await api(`/api/products/${id}`, { method: 'DELETE' });
+    toast('Product deleted');
+    loadProducts();
+    loadDashboard();
+  } catch (e) { toast(e.message, false); }
+}
+
+function printLabel(id) {
+  const p = productsCache.find((x) => x.id === id);
+  if (!p) return;
+  // Render the barcode to an offscreen canvas in THIS document first (avoids
+  // manipulating DOM nodes across windows, which some browsers block), then
+  // embed the resulting image as a data URL in the popup window.
+  const canvas = document.createElement('canvas');
+  JsBarcode(canvas, p.barcode, { format: 'CODE128', width: 2, height: 60, displayValue: true });
+  const dataUrl = canvas.toDataURL('image/png');
+
+  const w = window.open('', '_blank', 'width=420,height=320');
+  w.document.write(`
+    <html><head><title>Label - ${esc(p.barcode)}</title></head>
+    <body style="font-family:sans-serif;text-align:center;padding:20px;">
+      <div style="font-weight:700;font-size:14px;margin-bottom:8px;">${esc(p.product_name)}</div>
+      <img src="${dataUrl}" alt="barcode">
+      <div style="font-size:11px;color:#555;margin-top:6px;">${esc(p.position || '')} ${p.allocated_user ? '• ' + esc(p.allocated_user) : ''}</div>
+    </body></html>
+  `);
+  w.document.close();
+  setTimeout(() => w.print(), 300);
+}
+
+// ---------- SCAN HISTORY ----------
+async function loadHistory() {
+  const params = new URLSearchParams();
+  const barcode = document.getElementById('historyBarcode').value.trim();
+  const user = document.getElementById('historyUser').value;
+  const from = document.getElementById('historyFrom').value;
+  const to = document.getElementById('historyTo').value;
+  if (barcode) params.set('barcode', barcode);
+  if (user) params.set('user', user);
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+
+  const data = await api('/api/scans?' + params.toString());
+  const body = document.getElementById('historyBody');
+  body.innerHTML = '';
+  data.scans.forEach((s) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${s.scan_date}</td><td>${s.scan_time}</td><td style="font-family:monospace">${esc(s.barcode)}</td><td>${esc(s.product_name)}</td><td>${esc(s.position || '-')}</td><td>${esc(s.allocated_user || '-')}</td><td>${esc(s.scanned_by)}</td><td>${esc(s.device_name)}</td><td>${esc(s.remarks || '-')}</td>`;
+    body.appendChild(tr);
+  });
+  document.getElementById('historyEmpty').classList.toggle('hidden', data.scans.length > 0);
+}
+
+// ---------- USERS ----------
+async function loadUsers() {
+  const data = await api('/api/users');
+  const body = document.getElementById('usersBody');
+  body.innerHTML = '';
+  const historySelect = document.getElementById('historyUser');
+  historySelect.innerHTML = '<option value="">All Users</option>';
+  data.users.forEach((u) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${esc(u.username)}</td><td>${esc(u.full_name)}</td><td><span class="role-badge role-${u.role}">${u.role}</span></td><td>${new Date(u.created_at).toLocaleDateString()}</td><td><button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id})">Delete</button></td>`;
+    body.appendChild(tr);
+
+    const opt = document.createElement('option');
+    opt.value = u.username;
+    opt.textContent = u.username;
+    historySelect.appendChild(opt);
+  });
+}
+
+async function addUser() {
+  const username = document.getElementById('newUserUsername').value.trim();
+  const full_name = document.getElementById('newUserFullName').value.trim();
+  const password = document.getElementById('newUserPassword').value;
+  const role = document.getElementById('newUserRole').value;
+  if (!username || !password) { toast('Username and password required', false); return; }
+  try {
+    await api('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password, full_name, role })
+    });
+    toast('User added');
+    document.getElementById('newUserUsername').value = '';
+    document.getElementById('newUserFullName').value = '';
+    document.getElementById('newUserPassword').value = '';
+    loadUsers();
+    loadDashboard();
+  } catch (e) { toast(e.message, false); }
+}
+
+async function deleteUser(id) {
+  if (!confirm('Delete this user?')) return;
+  try {
+    await api(`/api/users/${id}`, { method: 'DELETE' });
+    toast('User deleted');
+    loadUsers();
+    loadDashboard();
+  } catch (e) { toast(e.message, false); }
+}
+
+function esc(str) {
+  const div = document.createElement('div');
+  div.textContent = str == null ? '' : String(str);
+  return div.innerHTML;
+}
+
+init();
+</script>
+</body>
+</html>
