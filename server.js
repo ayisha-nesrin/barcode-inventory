@@ -1,6 +1,6 @@
 // Load DATABASE_URL / SESSION_SECRET from a local .env file if one exists
 // (used only when running on your own computer - Render and other hosts
-// provide these as real environment variables instead, so this is a no-op
+// provide these as real environment variables instead, so this is a no-oP
 // there).
 require('dotenv').config();
 
