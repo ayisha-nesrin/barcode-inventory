@@ -58,6 +58,27 @@
   .role-admin{background:#ede9fe;color:#6d28d9;}
   .role-scanner{background:#dbeafe;color:#1d4ed8;}
 
+  /* Global search */
+  .global-search{position:relative;margin-bottom:20px;}
+  .global-search input{width:100%;padding:14px 16px 14px 44px;border:1px solid #d1d5db;border-radius:10px;font-size:16px;background:#fff url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="%236b7280" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>') no-repeat 14px center;box-shadow:0 2px 8px rgba(0,0,0,.05);}
+  .global-search input:focus{outline:2px solid var(--blue);border-color:var(--blue);}
+  .search-results{display:none;}
+  .search-results.active{display:block;}
+  .search-results h2{display:flex;align-items:center;gap:8px;}
+  .search-count{font-size:11px;font-weight:700;background:#eef2ff;color:var(--blue);padding:2px 8px;border-radius:20px;}
+  mark{background:#fef08a;color:inherit;border-radius:2px;padding:0 1px;}
+  .dashboard-default.hidden{display:none !important;}
+
+  /* Barcode generator */
+  .barcode-preview{text-align:center;padding:16px;background:#f8fafc;border-radius:10px;margin-top:14px;}
+  .barcode-preview canvas{max-width:100%;}
+  .barcode-value{font-family:monospace;font-size:13px;color:#6b7280;margin-top:6px;word-break:break-all;}
+  .barcode-actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;}
+  .barcode-actions .btn{flex:1;min-width:100px;}
+  .field-hint{font-size:11px;color:#9ca3af;margin-top:3px;}
+  .required-mark{color:var(--red);}
+  .barcode-current{display:flex;align-items:center;justify-content:space-between;gap:8px;background:#f8fafc;padding:8px 10px;border-radius:7px;margin-bottom:6px;flex-wrap:wrap;}
+
   @media (max-width: 640px) {
     header{padding:12px 14px;flex-wrap:wrap;gap:8px;}
     header .title{font-size:15px;}
@@ -71,6 +92,9 @@
     .toolbar{gap:8px;}
     .toolbar input, .toolbar select{flex:1 1 auto;min-width:0;}
     .modal{max-width:100%;margin:0 12px;}
+    .global-search input{padding:12px 14px 12px 40px;font-size:15px;}
+    .barcode-actions{flex-direction:column;}
+    .barcode-actions .btn{width:100%;}
   }
 </style>
 </head>
@@ -97,21 +121,53 @@
 
   <!-- DASHBOARD -->
   <section class="tab active" id="tab-dashboard">
-    <div class="stats">
-      <div class="stat-card"><div class="num" id="statProducts">-</div><div class="label">Total Products</div></div>
-      <div class="stat-card"><div class="num" id="statScans">-</div><div class="label">Total Scans</div></div>
-      <div class="stat-card"><div class="num" id="statScansToday">-</div><div class="label">Scans Today</div></div>
-      <div class="stat-card"><div class="num" id="statUsers">-</div><div class="label">Users</div></div>
+    <div class="global-search">
+      <input type="text" id="globalSearch" placeholder="Search everything: product, brand, barcode, category, user, device, date...">
     </div>
-    <div class="panel">
-      <h2>Recent Scans</h2>
-      <div class="table-wrap">
-      <table>
-        <thead><tr><th>Date/Time</th><th>Barcode</th><th>Product</th><th>Scanned By</th><th>Device</th><th>Position</th></tr></thead>
-        <tbody id="recentScansBody"></tbody>
-      </table>
+
+    <!-- Search results (shown only while searching) -->
+    <div class="search-results" id="searchResults">
+      <div class="panel">
+        <h2>Matching Products <span class="search-count" id="searchProductsCount">0</span></h2>
+        <div class="table-wrap">
+        <table>
+          <thead><tr><th></th><th>Barcode</th><th>Product Name</th><th>Brand</th><th>Category</th><th>Position</th><th>Allocated User</th></tr></thead>
+          <tbody id="searchProductsBody"></tbody>
+        </table>
+        </div>
+        <div class="empty hidden" id="searchProductsEmpty">No matching products.</div>
       </div>
-      <div class="empty hidden" id="recentScansEmpty">No scans yet.</div>
+      <div class="panel">
+        <h2>Matching Scan History <span class="search-count" id="searchScansCount">0</span></h2>
+        <div class="table-wrap">
+        <table>
+          <thead><tr><th>Date</th><th>Time</th><th>Barcode</th><th>Product</th><th>Scanned By</th><th>Device</th></tr></thead>
+          <tbody id="searchScansBody"></tbody>
+        </table>
+        </div>
+        <div class="empty hidden" id="searchScansEmpty">No matching scan history.</div>
+      </div>
+      <div class="empty hidden" id="searchNoResults">No results found for your search.</div>
+    </div>
+
+    <!-- Default dashboard view (hidden while searching) -->
+    <div class="dashboard-default" id="dashboardDefault">
+      <div class="stats">
+        <div class="stat-card"><div class="num" id="statProducts">-</div><div class="label">Total Products</div></div>
+        <div class="stat-card"><div class="num" id="statScans">-</div><div class="label">Total Scans</div></div>
+        <div class="stat-card"><div class="num" id="statScansToday">-</div><div class="label">Scans Today</div></div>
+        <div class="stat-card"><div class="num" id="statUsers">-</div><div class="label">Users</div></div>
+      </div>
+      <div class="panel">
+        <h2>Recent Scans</h2>
+        <div class="table-wrap">
+        <table>
+          <thead><tr><th>Date/Time</th><th>Barcode</th><th>Product</th><th>Scanned By</th><th>Device</th><th>Position</th></tr></thead>
+          <tbody id="recentScansBody"></tbody>
+        </table>
+        </div>
+        <div class="empty hidden" id="recentScansEmpty">No scans yet.</div>
+      </div>
     </div>
   </section>
 
@@ -122,12 +178,13 @@
       <div class="toolbar">
         <input type="text" id="productSearch" placeholder="Search barcode, name, position, user...">
         <button class="btn btn-primary" id="addProductBtn">+ Add Product</button>
+        <button class="btn btn-primary" id="createBarcodeBtn">+ Create Barcode</button>
         <button class="btn btn-secondary" onclick="window.open('/api/export/products.xlsx')">Export Excel</button>
         <button class="btn btn-secondary" onclick="window.open('/api/export/products.pdf')">Export PDF</button>
       </div>
       <div class="table-wrap">
       <table>
-        <thead><tr><th></th><th>Barcode</th><th>Product Name</th><th>Position</th><th>Allocated User</th><th>Updated</th><th>Actions</th></tr></thead>
+        <thead><tr><th></th><th>Barcode</th><th>Product Name</th><th>Brand</th><th>Category</th><th>Position</th><th>Allocated User</th><th>Updated</th><th>Actions</th></tr></thead>
         <tbody id="productsBody"></tbody>
       </table>
       </div>
@@ -190,9 +247,20 @@
 <div class="overlay hidden" id="editOverlay">
   <div class="modal">
     <h3>Edit Product</h3>
-    <div id="editBarcodeLabel" style="font-family:monospace;color:#6b7280;font-size:13px;margin-bottom:8px;"></div>
+    <div class="barcode-current">
+      <span id="editBarcodeLabel" style="font-family:monospace;color:#6b7280;font-size:13px;"></span>
+      <button class="btn btn-secondary btn-sm" id="regenerateBarcodeBtn" type="button">Regenerate Barcode</button>
+    </div>
     <label>Product Name</label>
     <input type="text" id="editName">
+    <label>Brand Name</label>
+    <input type="text" id="editBrand">
+    <label>Category</label>
+    <input type="text" id="editCategory">
+    <label>Product Variant <span class="field-hint" style="display:inline;">(optional)</span></label>
+    <input type="text" id="editVariant">
+    <label>Serial Number <span class="field-hint" style="display:inline;">(optional)</span></label>
+    <input type="text" id="editSerial">
     <label>Position / Location</label>
     <input type="text" id="editPosition">
     <label>Allocated User</label>
@@ -202,6 +270,45 @@
     <div class="modal-actions">
       <button class="btn btn-success" id="saveEditBtn" style="flex:1;">Save</button>
       <button class="btn btn-secondary" id="cancelEditBtn" style="flex:1;">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Create Barcode Modal -->
+<div class="overlay hidden" id="createBarcodeOverlay">
+  <div class="modal">
+    <h3>Create Barcode</h3>
+    <div id="createBarcodeForm">
+      <label>Product Name <span class="required-mark">*</span></label>
+      <input type="text" id="cbName">
+      <label>Brand Name <span class="required-mark">*</span></label>
+      <input type="text" id="cbBrand">
+      <label>Category <span class="required-mark">*</span></label>
+      <input type="text" id="cbCategory">
+      <label>Product Variant <span class="field-hint" style="display:inline;">(optional — e.g. size, color, capacity)</span></label>
+      <input type="text" id="cbVariant">
+      <label>Serial Number <span class="field-hint" style="display:inline;">(optional)</span></label>
+      <input type="text" id="cbSerial">
+      <label>Location <span class="field-hint" style="display:inline;">(optional)</span></label>
+      <input type="text" id="cbLocation">
+      <div class="modal-actions">
+        <button class="btn btn-primary" id="generateBarcodeBtn" style="flex:1;">Generate Barcode</button>
+        <button class="btn btn-secondary" id="cancelCreateBarcodeBtn" style="flex:1;">Cancel</button>
+      </div>
+    </div>
+    <div id="createBarcodeResult" class="hidden">
+      <div class="barcode-preview">
+        <canvas id="cbCanvas"></canvas>
+        <div class="barcode-value" id="cbValue"></div>
+      </div>
+      <div class="barcode-actions">
+        <button class="btn btn-secondary" id="downloadPngBtn">Download PNG</button>
+        <button class="btn btn-secondary" id="downloadSvgBtn">Download SVG</button>
+        <button class="btn btn-secondary" id="printGeneratedBtn">Print</button>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-success" id="doneCreateBarcodeBtn" style="flex:1;">Done</button>
+      </div>
     </div>
   </div>
 </div>
@@ -290,6 +397,17 @@ async function init() {
   document.getElementById('cancelEditBtn').addEventListener('click', closeEditModal);
   document.getElementById('saveAddBtn').addEventListener('click', saveAdd);
   document.getElementById('cancelAddBtn').addEventListener('click', closeAddModal);
+  document.getElementById('regenerateBarcodeBtn').addEventListener('click', regenerateBarcode);
+
+  document.getElementById('createBarcodeBtn').addEventListener('click', openCreateBarcodeModal);
+  document.getElementById('cancelCreateBarcodeBtn').addEventListener('click', closeCreateBarcodeModal);
+  document.getElementById('doneCreateBarcodeBtn').addEventListener('click', closeCreateBarcodeModal);
+  document.getElementById('generateBarcodeBtn').addEventListener('click', generateBarcode);
+  document.getElementById('downloadPngBtn').addEventListener('click', downloadBarcodePNG);
+  document.getElementById('downloadSvgBtn').addEventListener('click', downloadBarcodeSVG);
+  document.getElementById('printGeneratedBtn').addEventListener('click', printGeneratedBarcode);
+
+  document.getElementById('globalSearch').addEventListener('input', debounce(runGlobalSearch, 300));
 }
 
 function debounce(fn, ms) {
@@ -337,6 +455,8 @@ async function loadProducts() {
       <td>${img}</td>
       <td style="font-family:monospace">${esc(p.barcode)}</td>
       <td>${esc(p.product_name)}</td>
+      <td>${esc(p.brand_name || '-')}</td>
+      <td>${esc(p.category || '-')}</td>
       <td>${esc(p.position || '-')}</td>
       <td>${esc(p.allocated_user || '-')}</td>
       <td>${new Date(p.updated_at).toLocaleDateString()}</td>
@@ -356,6 +476,10 @@ function openEditModal(id) {
   document.getElementById('editOverlay').dataset.id = id;
   document.getElementById('editBarcodeLabel').textContent = p.barcode;
   document.getElementById('editName').value = p.product_name;
+  document.getElementById('editBrand').value = p.brand_name || '';
+  document.getElementById('editCategory').value = p.category || '';
+  document.getElementById('editVariant').value = p.variant || '';
+  document.getElementById('editSerial').value = p.serial_number || '';
   document.getElementById('editPosition').value = p.position || '';
   document.getElementById('editAllocated').value = p.allocated_user || '';
   document.getElementById('editRemarks').value = p.remarks || '';
@@ -371,6 +495,10 @@ async function saveEdit() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         product_name: document.getElementById('editName').value,
+        brand_name: document.getElementById('editBrand').value,
+        category: document.getElementById('editCategory').value,
+        variant: document.getElementById('editVariant').value,
+        serial_number: document.getElementById('editSerial').value,
         position: document.getElementById('editPosition').value,
         allocated_user: document.getElementById('editAllocated').value,
         remarks: document.getElementById('editRemarks').value
@@ -378,6 +506,20 @@ async function saveEdit() {
     });
     toast('Product updated');
     closeEditModal();
+    loadProducts();
+  } catch (e) { toast(e.message, false); }
+}
+
+async function regenerateBarcode() {
+  const id = document.getElementById('editOverlay').dataset.id;
+  if (!id) return;
+  if (!confirm('Regenerate the barcode for this product? The old barcode will stop working, so re-print any label already stuck on this item.')) return;
+  try {
+    const data = await api(`/api/products/${id}/regenerate-barcode`, { method: 'POST' });
+    document.getElementById('editBarcodeLabel').textContent = data.product.barcode;
+    const idx = productsCache.findIndex((x) => x.id === Number(id));
+    if (idx > -1) productsCache[idx] = data.product;
+    toast('Barcode regenerated');
     loadProducts();
   } catch (e) { toast(e.message, false); }
 }
@@ -518,6 +660,142 @@ async function deleteUser(id) {
     loadUsers();
     loadDashboard();
   } catch (e) { toast(e.message, false); }
+}
+
+// ---------- BARCODE GENERATOR ----------
+let lastGeneratedBarcode = '';
+
+function openCreateBarcodeModal() {
+  ['cbName', 'cbBrand', 'cbCategory', 'cbVariant', 'cbSerial', 'cbLocation'].forEach((id) => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('createBarcodeForm').classList.remove('hidden');
+  document.getElementById('createBarcodeResult').classList.add('hidden');
+  document.getElementById('createBarcodeOverlay').classList.remove('hidden');
+}
+function closeCreateBarcodeModal() {
+  document.getElementById('createBarcodeOverlay').classList.add('hidden');
+  loadProducts();
+  loadDashboard();
+}
+
+async function generateBarcode() {
+  const product_name = document.getElementById('cbName').value.trim();
+  const brand_name = document.getElementById('cbBrand').value.trim();
+  const category = document.getElementById('cbCategory').value.trim();
+  const variant = document.getElementById('cbVariant').value.trim();
+  const serial_number = document.getElementById('cbSerial').value.trim();
+  const location = document.getElementById('cbLocation').value.trim();
+
+  if (!product_name || !brand_name || !category) {
+    toast('Product Name, Brand Name and Category are required', false);
+    return;
+  }
+
+  try {
+    const data = await api('/api/products/generate-barcode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product_name, brand_name, category, variant, serial_number, location })
+    });
+    lastGeneratedBarcode = data.product.barcode;
+    JsBarcode('#cbCanvas', lastGeneratedBarcode, { format: 'CODE128', width: 2, height: 70, displayValue: true });
+    document.getElementById('cbValue').textContent = `Barcode: ${lastGeneratedBarcode} — ${product_name}`;
+    document.getElementById('createBarcodeForm').classList.add('hidden');
+    document.getElementById('createBarcodeResult').classList.remove('hidden');
+    toast('Barcode generated');
+  } catch (e) { toast(e.message, false); }
+}
+
+function downloadBarcodePNG() {
+  const canvas = document.getElementById('cbCanvas');
+  const a = document.createElement('a');
+  a.href = canvas.toDataURL('image/png');
+  a.download = `barcode-${lastGeneratedBarcode}.png`;
+  a.click();
+}
+
+function downloadBarcodeSVG() {
+  const svg = document.createElement('div');
+  JsBarcode(svg, lastGeneratedBarcode, { format: 'CODE128', width: 2, height: 70, displayValue: true, xmlDocument: document });
+  const svgEl = svg.querySelector('svg');
+  const serializer = new XMLSerializer();
+  const source = serializer.serializeToString(svgEl);
+  const blob = new Blob([source], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `barcode-${lastGeneratedBarcode}.svg`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function printGeneratedBarcode() {
+  const dataUrl = document.getElementById('cbCanvas').toDataURL('image/png');
+  const name = document.getElementById('cbName').value.trim();
+  const w = window.open('', '_blank', 'width=420,height=320');
+  w.document.write(`
+    <html><head><title>Barcode - ${esc(lastGeneratedBarcode)}</title></head>
+    <body style="font-family:sans-serif;text-align:center;padding:20px;">
+      <div style="font-weight:700;font-size:14px;margin-bottom:8px;">${esc(name)}</div>
+      <img src="${dataUrl}" alt="barcode">
+    </body></html>
+  `);
+  w.document.close();
+  setTimeout(() => w.print(), 300);
+}
+
+// ---------- GLOBAL SEARCH ----------
+function highlight(text, q) {
+  const str = text == null ? '' : String(text);
+  const escaped = esc(str);
+  if (!q) return escaped;
+  const escQ = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp('(' + escQ + ')', 'ig');
+  return escaped.replace(re, '<mark>$1</mark>');
+}
+
+async function runGlobalSearch() {
+  const q = document.getElementById('globalSearch').value.trim();
+  if (!q) {
+    document.getElementById('searchResults').classList.remove('active');
+    document.getElementById('dashboardDefault').classList.remove('hidden');
+    return;
+  }
+  document.getElementById('dashboardDefault').classList.add('hidden');
+  document.getElementById('searchResults').classList.add('active');
+
+  let data;
+  try {
+    data = await api('/api/search?q=' + encodeURIComponent(q));
+  } catch (e) {
+    toast(e.message, false);
+    return;
+  }
+
+  const pBody = document.getElementById('searchProductsBody');
+  pBody.innerHTML = '';
+  data.products.forEach((p) => {
+    const tr = document.createElement('tr');
+    const img = p.image_path ? `<img class="thumb" src="${p.image_path}">` : `<div class="thumb-empty"></div>`;
+    tr.innerHTML = `<td>${img}</td><td style="font-family:monospace">${highlight(p.barcode, q)}</td><td>${highlight(p.product_name, q)}</td><td>${highlight(p.brand_name || '-', q)}</td><td>${highlight(p.category || '-', q)}</td><td>${highlight(p.position || '-', q)}</td><td>${highlight(p.allocated_user || '-', q)}</td>`;
+    pBody.appendChild(tr);
+  });
+  document.getElementById('searchProductsCount').textContent = data.products.length;
+  document.getElementById('searchProductsEmpty').classList.toggle('hidden', data.products.length > 0);
+
+  const sBody = document.getElementById('searchScansBody');
+  sBody.innerHTML = '';
+  data.scans.forEach((s) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${highlight(s.scan_date, q)}</td><td>${highlight(s.scan_time, q)}</td><td style="font-family:monospace">${highlight(s.barcode, q)}</td><td>${highlight(s.product_name, q)}</td><td>${highlight(s.scanned_by, q)}</td><td>${highlight(s.device_name, q)}</td>`;
+    sBody.appendChild(tr);
+  });
+  document.getElementById('searchScansCount').textContent = data.scans.length;
+  document.getElementById('searchScansEmpty').classList.toggle('hidden', data.scans.length > 0);
+
+  const noResults = data.products.length === 0 && data.scans.length === 0;
+  document.getElementById('searchNoResults').classList.toggle('hidden', !noResults);
 }
 
 function esc(str) {
