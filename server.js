@@ -16,6 +16,7 @@ const scanRoutes = require('./scan-routes');
 const userRoutes = require('./user-routes');
 const statsRoutes = require('./stats-routes');
 const exportRoutes = require('./export-routes');
+const searchRoutes = require('./search-routes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -60,6 +61,7 @@ app.use('/api/scans', scanRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/export', exportRoutes);
+app.use('/api/search', searchRoutes);
 
 // Error handler
 app.use((err, req, res, next) => {
