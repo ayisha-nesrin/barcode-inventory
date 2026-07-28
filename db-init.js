@@ -64,6 +64,21 @@ async function initDB() {
     )
   `);
 
+  // Migration: add barcode-generator fields to a products table that may
+  // already exist from before this feature (safe/no-op if already present).
+  await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS brand_name TEXT DEFAULT ''`);
+  await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS category TEXT DEFAULT ''`);
+  await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS variant TEXT DEFAULT ''`);
+  await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS serial_number TEXT DEFAULT ''`);
+
+  // Migration: track how many times each unique product has been scanned,
+  // instead of ever creating a second record for the same barcode. Every
+  // scan of an existing barcode increments this counter and updates
+  // last_scanned_at on the ONE existing row (see scan-routes.js) - the
+  // scans table below still keeps a full history row per scan.
+  await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS scan_count INTEGER NOT NULL DEFAULT 0`);
+  await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS last_scanned_at TIMESTAMPTZ`);
+
   await query(`
     CREATE TABLE IF NOT EXISTS scans (
       id SERIAL PRIMARY KEY,
@@ -131,6 +146,7 @@ async function seed() {
             position, allocated_user, 'Initial scan (demo data)'
           ]
         );
+        await query('UPDATE products SET scan_count = 1, last_scanned_at = now() WHERE id = $1', [rows[0].id]);
       }
     }
   }
