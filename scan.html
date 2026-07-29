@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
-<title>AEC Inventory - Scan</title>
+<title>AEC Group - Scan</title>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#1a56db">
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
@@ -11,15 +11,23 @@
   /* Mobile-first: base rules below target phones (the primary device for
      this scanner app). A single min-width breakpoint widens things out for
      tablets/desktop without changing the mobile layout. */
-  :root{--blue:#1a56db;--bg:#f3f5f9;--green:#16a34a;--red:#dc2626;}
+  :root{--blue:#1a56db;--bg:#f3f5f9;--green:#16a34a;--red:#dc2626;--amber:#d97706;}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html{-webkit-text-size-adjust:100%;}
   body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);margin:0;min-height:100dvh;padding-bottom:calc(40px + env(safe-area-inset-bottom));}
-  header{background:var(--blue);color:#fff;padding:12px 14px;padding-top:calc(12px + env(safe-area-inset-top));display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:10;}
+  header{background:var(--blue);color:#fff;padding:12px 14px;padding-top:calc(12px + env(safe-area-inset-top));display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:10;flex-wrap:wrap;gap:6px;}
   header .title{font-weight:700;font-size:15px;}
+  header .badge{display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,.18);border-radius:20px;padding:2px 9px;font-size:11px;margin-top:3px;}
   header .userinfo{font-size:11px;opacity:.9;}
   header a, header button{color:#fff;background:rgba(255,255,255,.18);border:none;padding:9px 12px;border-radius:6px;font-size:12px;text-decoration:none;cursor:pointer;min-height:38px;display:inline-flex;align-items:center;}
+
+  .subnav{display:flex;gap:6px;background:#fff;padding:8px 14px;border-bottom:1px solid #e5e7eb;position:sticky;top:56px;z-index:9;}
+  .subnav button{flex:1;background:#f3f4f6;border:none;border-radius:8px;padding:11px;font-size:13px;font-weight:700;color:#6b7280;cursor:pointer;min-height:42px;}
+  .subnav button.active{background:var(--blue);color:#fff;}
+
   main{max-width:480px;margin:0 auto;padding:14px;padding-left:calc(14px + env(safe-area-inset-left));padding-right:calc(14px + env(safe-area-inset-right));}
+  .view{display:none;}
+  .view.active{display:block;}
   .card{background:#fff;border-radius:12px;box-shadow:0 4px 14px rgba(0,0,0,.06);padding:16px;margin-bottom:14px;}
   #reader{width:100%;border-radius:10px;overflow:hidden;}
   .btn{display:block;width:100%;padding:15px;border:none;border-radius:9px;font-size:16px;font-weight:600;cursor:pointer;margin-top:10px;min-height:48px;touch-action:manipulation;}
@@ -28,15 +36,15 @@
   .btn-success{background:var(--green);color:#fff;}
   .btn:disabled{opacity:.6;}
   label{display:block;font-size:13px;font-weight:600;color:#374151;margin:12px 0 5px;}
-  input, textarea{width:100%;padding:12px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:16px;font-family:inherit;min-height:46px;}
+  input, textarea, select{width:100%;padding:12px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:16px;font-family:inherit;min-height:46px;}
   textarea{resize:vertical;min-height:70px;}
   input[type=file]{padding:9px 10px;min-height:46px;}
   .manual{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}
   .manual input{flex:1 1 140px;}
   .manual button{padding:0 18px;border:none;border-radius:8px;background:var(--blue);color:#fff;font-weight:600;min-height:46px;min-width:64px;}
-  .badge{display:inline-block;font-size:11px;font-weight:700;padding:4px 9px;border-radius:20px;margin-bottom:8px;}
-  .badge.found{background:#dcfce7;color:var(--green);}
-  .badge.new{background:#fef9c3;color:#92400e;}
+  .badge-chip{display:inline-block;font-size:11px;font-weight:700;padding:4px 9px;border-radius:20px;margin-bottom:8px;}
+  .badge-chip.found{background:#dcfce7;color:var(--green);}
+  .badge-chip.new{background:#fef9c3;color:#92400e;}
   .prod-name{font-size:18px;font-weight:700;color:#111827;margin:4px 0;}
   .prod-barcode{font-family:monospace;color:#6b7280;font-size:13px;margin-bottom:10px;word-break:break-all;}
   .prod-img{width:100%;max-height:200px;object-fit:contain;border-radius:8px;background:#f3f4f6;margin-bottom:10px;}
@@ -45,18 +53,21 @@
   .toast{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);background:#111827;color:#fff;padding:12px 20px;border-radius:8px;font-size:14px;display:none;z-index:100;max-width:90%;text-align:center;}
   .hidden{display:none !important;}
   .device-info{font-size:11px;color:#9ca3af;margin-top:10px;text-align:center;}
+  .required-mark{color:var(--red);}
+  .field-hint{font-size:11px;color:#9ca3af;margin-top:3px;}
+  .status-chip{display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;}
+  .status-Available{background:#dcfce7;color:#15803d;}
+  .status-Assigned{background:#dbeafe;color:#1d4ed8;}
+  .status-Maintenance,.status-Repair{background:#fef3c7;color:#92400e;}
+  .status-Lost,.status-Scrapped,.status-Disposed{background:#fee2e2;color:#b91c1c;}
+  .empty{color:#9ca3af;text-align:center;padding:26px;font-size:13px;}
 
-  /* Tablets / small laptops and up */
   @media (min-width: 641px) {
-    main{max-width:520px;padding:24px;}
+    main{max-width:560px;padding:24px;}
     .card{padding:22px;}
     header{padding:14px 24px;}
   }
 
-  /* Landscape phones: the layout above (tall card, big camera box) wastes
-     space when the screen is wide and short, so trim vertical padding and
-     cap the camera preview height so the Start/Stop buttons stay visible
-     without scrolling. */
   @media (max-height: 480px) and (orientation: landscape) {
     header{padding:8px 14px;}
     main{padding:10px;max-width:640px;}
@@ -71,61 +82,103 @@
 <body>
 <header>
   <div>
-    <div class="title">Barcode Scanner</div>
+    <div class="title">AEC Group Scanner</div>
+    <div class="badge" id="scopeBadge"></div>
     <div class="userinfo" id="userinfo"></div>
   </div>
   <div style="display:flex;gap:6px;">
-    <a href="/admin.html" id="adminLink" class="hidden">Admin</a>
+    <a href="/admin.html" id="adminLink" class="hidden">Dashboard</a>
     <button id="logoutBtn">Logout</button>
   </div>
 </header>
 
+<div class="subnav">
+  <button class="sub-btn active" data-view="scan">Scan</button>
+  <button class="sub-btn" data-view="myassets">My Assigned Assets</button>
+</div>
+
 <main>
-  <div class="card" id="scanCard">
-    <div id="reader"></div>
-    <button class="btn btn-primary" id="startBtn">Start Scanning</button>
-    <button class="btn btn-secondary hidden" id="stopBtn">Stop Camera</button>
-    <div class="manual">
-      <input type="text" id="manualBarcode" placeholder="Or type barcode manually">
-      <button id="manualBtn">Go</button>
+  <!-- SCAN VIEW -->
+  <div class="view active" id="view-scan">
+    <div class="card" id="scanCard">
+      <div id="reader"></div>
+      <button class="btn btn-primary" id="startBtn">Start Scanning (Barcode/QR)</button>
+      <button class="btn btn-secondary hidden" id="stopBtn">Stop Camera</button>
+      <div class="manual">
+        <input type="text" id="manualBarcode" placeholder="Or type barcode manually">
+        <button id="manualBtn">Go</button>
+      </div>
+      <div class="device-info" id="deviceInfo"></div>
     </div>
-    <div class="device-info" id="deviceInfo"></div>
+
+    <div class="card hidden" id="foundCard">
+      <span class="badge-chip found">Asset Found</span>
+      <img class="prod-img hidden" id="foundImg" alt="Asset photo">
+      <div class="prod-name" id="foundName"></div>
+      <div class="prod-barcode" id="foundBarcode"></div>
+      <div class="meta-row"><span>Status</span><span id="foundStatus"></span></div>
+      <div class="meta-row"><span>Serial Number</span><span id="foundSerial"></span></div>
+      <div class="meta-row"><span>Category / Vendor</span><span id="foundCatVendor"></span></div>
+      <div class="meta-row"><span>Quantity</span><span id="foundQuantity"></span></div>
+      <div class="meta-row"><span>Assigned To</span><span id="foundAssigned"></span></div>
+      <div class="meta-row"><span>Times scanned</span><span id="foundScanCount">-</span></div>
+      <div class="meta-row"><span>Last scanned</span><span id="foundLastScan">-</span></div>
+      <label>Location</label>
+      <input type="text" id="foundLocation">
+      <label>Department</label>
+      <input type="text" id="foundDepartment">
+      <label>Remarks</label>
+      <textarea id="foundRemarks" placeholder="Optional note for this scan"></textarea>
+      <label>Replace Photo (optional)</label>
+      <input type="file" id="foundPhoto" accept="image/*" capture="environment">
+      <button class="btn btn-success" id="logScanBtn">Save &amp; Log Scan</button>
+      <button class="btn btn-secondary" id="scanNextBtn1">Scan Next Item</button>
+    </div>
+
+    <div class="card hidden" id="newCard">
+      <span class="badge-chip new">New Asset</span>
+      <div class="prod-barcode" id="newBarcode"></div>
+      <label>Asset Name <span class="required-mark">*</span></label>
+      <input type="text" id="newName" required>
+      <label>Serial Number <span class="required-mark">*</span></label>
+      <input type="text" id="newSerial" required>
+      <div class="field-hint">Every asset needs a unique serial number - duplicates are rejected.</div>
+      <label>Category</label>
+      <input type="text" id="newCategory" placeholder="e.g. Electronics, Consumable">
+      <label>Vendor</label>
+      <select id="newVendor"><option value="">-- None --</option></select>
+      <label>Brand</label>
+      <input type="text" id="newBrand">
+      <label>Model</label>
+      <input type="text" id="newModel">
+      <label>Quantity</label>
+      <input type="number" id="newQuantity" value="1" min="0">
+      <label>Purchase Date</label>
+      <input type="date" id="newPurchaseDate">
+      <label>Warranty Expiry</label>
+      <input type="date" id="newWarrantyExpiry">
+      <label>Asset Photo</label>
+      <input type="file" id="newPhoto" accept="image/*" capture="environment">
+      <label>Location</label>
+      <input type="text" id="newLocation" placeholder="e.g. Rack A-12">
+      <label>Department</label>
+      <input type="text" id="newDepartment">
+      <label>Assigned Employee <span class="field-hint" style="display:inline;">(optional)</span></label>
+      <input type="text" id="newAssignedEmployee">
+      <label>Remarks</label>
+      <textarea id="newRemarks"></textarea>
+      <button class="btn btn-success" id="saveNewBtn">Save New Asset</button>
+      <button class="btn btn-secondary" id="scanNextBtn2">Cancel / Scan Next</button>
+    </div>
   </div>
 
-  <div class="card hidden" id="foundCard">
-    <span class="badge found">Product Found</span>
-    <img class="prod-img hidden" id="foundImg" alt="Product photo">
-    <div class="prod-name" id="foundName"></div>
-    <div class="prod-barcode" id="foundBarcode"></div>
-    <div class="meta-row"><span>Times scanned</span><span id="foundScanCount">-</span></div>
-    <div class="meta-row"><span>Last scanned</span><span id="foundLastScan">-</span></div>
-    <label>Position / Location</label>
-    <input type="text" id="foundPosition">
-    <label>Allocated User</label>
-    <input type="text" id="foundAllocated">
-    <label>Remarks</label>
-    <textarea id="foundRemarks" placeholder="Optional note for this scan"></textarea>
-    <label>Replace Photo (optional)</label>
-    <input type="file" id="foundPhoto" accept="image/*" capture="environment">
-    <button class="btn btn-success" id="logScanBtn">Save &amp; Log Scan</button>
-    <button class="btn btn-secondary" id="scanNextBtn1">Scan Next Item</button>
-  </div>
-
-  <div class="card hidden" id="newCard">
-    <span class="badge new">New Product</span>
-    <div class="prod-barcode" id="newBarcode"></div>
-    <label>Product Name *</label>
-    <input type="text" id="newName" required>
-    <label>Product Photo</label>
-    <input type="file" id="newPhoto" accept="image/*" capture="environment">
-    <label>Position / Location</label>
-    <input type="text" id="newPosition" placeholder="e.g. Rack A-12">
-    <label>Allocated User</label>
-    <input type="text" id="newAllocated" placeholder="e.g. John Smith">
-    <label>Remarks</label>
-    <textarea id="newRemarks"></textarea>
-    <button class="btn btn-success" id="saveNewBtn">Save New Product</button>
-    <button class="btn btn-secondary" id="scanNextBtn2">Cancel / Scan Next</button>
+  <!-- MY ASSIGNED ASSETS VIEW -->
+  <div class="view" id="view-myassets">
+    <div class="card">
+      <div style="font-weight:700;font-size:15px;margin-bottom:10px;">Assets currently assigned to me</div>
+      <div id="myAssetsList"></div>
+      <div class="empty hidden" id="myAssetsEmpty">No assets are currently assigned to you.</div>
+    </div>
   </div>
 </main>
 
@@ -142,7 +195,7 @@ function toast(msg, ok = true) {
   t.textContent = msg;
   t.style.background = ok ? '#111827' : '#dc2626';
   t.style.display = 'block';
-  setTimeout(() => (t.style.display = 'none'), 2500);
+  setTimeout(() => (t.style.display = 'none'), 2800);
 }
 
 function getDeviceId() {
@@ -170,25 +223,81 @@ function getDeviceName() {
   return `${name} (${browser})`;
 }
 
+async function api(url, opts) {
+  const res = await fetch(url, opts);
+  let data = {};
+  try { data = await res.json(); } catch (e) {}
+  if (!res.ok) { const err = new Error(data.error || 'Request failed'); err.data = data; throw err; }
+  return data;
+}
+
 async function init() {
-  const res = await fetch('/api/auth/me');
-  if (!res.ok) {
+  let me;
+  try {
+    me = await api('/api/auth/me');
+  } catch (e) {
     window.location.href = '/login.html';
     return;
   }
-  const data = await res.json();
-  currentUser = data.user;
-  document.getElementById('userinfo').textContent = `${currentUser.full_name} (${currentUser.role})`;
-  if (currentUser.role === 'admin') document.getElementById('adminLink').classList.remove('hidden');
+  currentUser = me.user;
+  document.getElementById('userinfo').textContent = `${currentUser.full_name} (${currentUser.role.replace('_',' ')})`;
+  const scopeBadge = document.getElementById('scopeBadge');
+  if (currentUser.vertical) {
+    scopeBadge.textContent = `${currentUser.vertical.icon || '🏢'} ${currentUser.vertical.name}`;
+  }
+  if (currentUser.role !== 'employee') document.getElementById('adminLink').classList.remove('hidden');
   document.getElementById('deviceInfo').textContent = `Device: ${getDeviceName()}`;
+
+  try {
+    const { vendors } = await api('/api/vendors');
+    const sel = document.getElementById('newVendor');
+    vendors.forEach((v) => {
+      const opt = document.createElement('option');
+      opt.value = v.id; opt.textContent = v.name;
+      sel.appendChild(opt);
+    });
+  } catch (e) {}
+
+  document.querySelectorAll('.sub-btn').forEach((btn) => {
+    btn.addEventListener('click', () => switchView(btn.dataset.view));
+  });
 
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/service-worker.js').catch(() => {});
   }
 }
 
+function switchView(view) {
+  document.querySelectorAll('.sub-btn').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
+  document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-' + view));
+  if (view === 'myassets') loadMyAssets();
+}
+
+async function loadMyAssets() {
+  const list = document.getElementById('myAssetsList');
+  const empty = document.getElementById('myAssetsEmpty');
+  list.innerHTML = '';
+  try {
+    const { assets } = await api('/api/assets?assigned_employee=' + encodeURIComponent(currentUser.full_name));
+    if (!assets.length) { empty.classList.remove('hidden'); return; }
+    empty.classList.add('hidden');
+    assets.forEach((a) => {
+      const row = document.createElement('div');
+      row.style.cssText = 'padding:10px 0;border-bottom:1px solid #f3f4f6;';
+      row.innerHTML = `
+        <div style="font-weight:700;font-size:14px;">${esc(a.asset_name)}</div>
+        <div style="font-family:monospace;font-size:12px;color:#6b7280;">${esc(a.barcode)} &bull; ${esc(a.serial_number)}</div>
+        <div style="margin-top:4px;"><span class="status-chip status-${a.status}">${esc(a.status)}</span> ${a.location ? '&bull; ' + esc(a.location) : ''}</div>
+      `;
+      list.appendChild(row);
+    });
+  } catch (e) {
+    toast(e.message, false);
+  }
+}
+
 document.getElementById('logoutBtn').addEventListener('click', async () => {
-  await fetch('/api/auth/logout', { method: 'POST' });
+  await api('/api/auth/logout', { method: 'POST' });
   window.location.href = '/login.html';
 });
 
@@ -240,28 +349,33 @@ async function handleBarcode(barcode) {
   currentBarcode = barcode;
   document.getElementById('manualBarcode').value = '';
 
-  const res = await fetch('/api/products/' + encodeURIComponent(barcode));
-  document.getElementById('scanCard').classList.add('hidden');
-
-  if (res.ok) {
-    const data = await res.json();
-    showFound(data.product, data.lastScan);
-  } else {
+  try {
+    const data = await api('/api/assets/' + encodeURIComponent(barcode));
+    document.getElementById('scanCard').classList.add('hidden');
+    showFound(data.asset, data.lastScan);
+  } catch (e) {
+    document.getElementById('scanCard').classList.add('hidden');
     showNew(barcode);
   }
 }
 
-function showFound(product, lastScan) {
+function showFound(asset, lastScan) {
   document.getElementById('newCard').classList.add('hidden');
   document.getElementById('foundCard').classList.remove('hidden');
-  document.getElementById('foundName').textContent = product.product_name;
-  document.getElementById('foundBarcode').textContent = product.barcode;
-  document.getElementById('foundPosition').value = product.position || '';
-  document.getElementById('foundAllocated').value = product.allocated_user || '';
+  document.getElementById('foundName').textContent = asset.asset_name;
+  document.getElementById('foundBarcode').textContent = asset.barcode;
+  document.getElementById('foundStatus').innerHTML = `<span class="status-chip status-${asset.status}">${asset.status}</span>`;
+  document.getElementById('foundSerial').textContent = asset.serial_number;
+  document.getElementById('foundCatVendor').textContent = `${asset.category || '-'} / ${asset.vendor_name || '-'}`;
+  document.getElementById('foundQuantity').textContent = asset.quantity;
+  document.getElementById('foundAssigned').textContent = asset.assigned_employee || 'Unassigned';
+  document.getElementById('foundLocation').value = asset.location || '';
+  document.getElementById('foundDepartment').value = asset.department || '';
   document.getElementById('foundRemarks').value = '';
+  document.getElementById('foundScanCount').textContent = asset.scan_count || 0;
   const img = document.getElementById('foundImg');
-  if (product.image_path) {
-    img.src = product.image_path;
+  if (asset.image_path) {
+    img.src = asset.image_path;
     img.classList.remove('hidden');
   } else {
     img.classList.add('hidden');
@@ -269,17 +383,15 @@ function showFound(product, lastScan) {
   document.getElementById('foundLastScan').textContent = lastScan
     ? `${lastScan.scan_date} ${lastScan.scan_time} by ${lastScan.scanned_by}`
     : 'Never';
-  document.getElementById('foundScanCount').textContent = product.scan_count || 0;
 }
 
 function showNew(barcode) {
   document.getElementById('foundCard').classList.add('hidden');
   document.getElementById('newCard').classList.remove('hidden');
   document.getElementById('newBarcode').textContent = barcode;
-  document.getElementById('newName').value = '';
-  document.getElementById('newPosition').value = '';
-  document.getElementById('newAllocated').value = '';
-  document.getElementById('newRemarks').value = '';
+  ['newName','newSerial','newCategory','newBrand','newModel','newPurchaseDate','newWarrantyExpiry','newLocation','newDepartment','newAssignedEmployee','newRemarks'].forEach((id) => document.getElementById(id).value = '');
+  document.getElementById('newQuantity').value = 1;
+  document.getElementById('newVendor').value = '';
 }
 
 function resetToScan() {
@@ -311,9 +423,9 @@ async function submitScan(formFields, photoInputId, btnEl) {
       return;
     }
     toast(
-      data.isNewProduct
-        ? 'New product saved'
-        : `Existing record updated (scanned ${data.product.scan_count}x total)`
+      data.isNewAsset
+        ? 'New asset saved'
+        : `Existing record updated (scanned ${data.asset.scan_count}x total)`
     );
     resetToScan();
   } catch (err) {
@@ -329,8 +441,8 @@ logBtn.dataset.label = logBtn.textContent;
 logBtn.addEventListener('click', () => {
   submitScan(
     {
-      position: document.getElementById('foundPosition').value,
-      allocated_user: document.getElementById('foundAllocated').value,
+      location: document.getElementById('foundLocation').value,
+      department: document.getElementById('foundDepartment').value,
       remarks: document.getElementById('foundRemarks').value
     },
     'foundPhoto',
@@ -342,21 +454,37 @@ const saveNewBtn = document.getElementById('saveNewBtn');
 saveNewBtn.dataset.label = saveNewBtn.textContent;
 saveNewBtn.addEventListener('click', () => {
   const name = document.getElementById('newName').value.trim();
-  if (!name) {
-    toast('Product name is required', false);
+  const serial = document.getElementById('newSerial').value.trim();
+  if (!name || !serial) {
+    toast('Asset Name and Serial Number are required', false);
     return;
   }
   submitScan(
     {
-      product_name: name,
-      position: document.getElementById('newPosition').value,
-      allocated_user: document.getElementById('newAllocated').value,
+      asset_name: name,
+      serial_number: serial,
+      category: document.getElementById('newCategory').value,
+      vendor_id: document.getElementById('newVendor').value,
+      brand: document.getElementById('newBrand').value,
+      model: document.getElementById('newModel').value,
+      quantity: document.getElementById('newQuantity').value || 1,
+      purchase_date: document.getElementById('newPurchaseDate').value,
+      warranty_expiry: document.getElementById('newWarrantyExpiry').value,
+      location: document.getElementById('newLocation').value,
+      department: document.getElementById('newDepartment').value,
+      assigned_employee: document.getElementById('newAssignedEmployee').value,
       remarks: document.getElementById('newRemarks').value
     },
     'newPhoto',
     saveNewBtn
   );
 });
+
+function esc(str) {
+  const div = document.createElement('div');
+  div.textContent = str == null ? '' : String(str);
+  return div.innerHTML;
+}
 
 init();
 </script>

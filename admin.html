@@ -3,26 +3,23 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>AEC Inventory - Admin Panel</title>
+<title>AEC Group - Asset Management</title>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#1a56db">
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
 <style>
-  /* ---------------------------------------------------------------------
-     Mobile-first stylesheet. Every rule below is written for a phone
-     screen FIRST; two min-width breakpoints (641px tablet, 1000px
-     desktop) then progressively add more breathing room, wider layouts
-     and multi-column grids for bigger screens. Nothing here assumes a
-     desktop viewport by default, so the app works the same whether it's
-     opened on a phone in a warehouse or a laptop in the office.
-     --------------------------------------------------------------------- */
-  :root{--blue:#1a56db;--bg:#f3f5f9;--green:#16a34a;--red:#dc2626;--border:#e5e7eb;}
+  /* Mobile-first stylesheet: base rules target phones; min-width:641px and
+     min-width:1000px breakpoints progressively widen the layout. A
+     max-height landscape breakpoint reclaims vertical space on rotated
+     phones. */
+  :root{--blue:#1a56db;--bg:#f3f5f9;--green:#16a34a;--red:#dc2626;--amber:#d97706;--border:#e5e7eb;}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   html{-webkit-text-size-adjust:100%;}
   body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);margin:0;color:#111827;}
 
   header{background:var(--blue);color:#fff;padding:10px 12px;padding-top:calc(10px + env(safe-area-inset-top));display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:6px;}
   header .title{font-weight:700;font-size:14px;line-height:1.3;}
+  header .badge{display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,.18);border-radius:20px;padding:2px 9px;font-size:11px;margin-top:3px;}
   header .userinfo{font-size:11px;opacity:.9;}
   header a, header button{color:#fff;background:rgba(255,255,255,.18);border:none;padding:9px 12px;border-radius:6px;font-size:12px;text-decoration:none;cursor:pointer;margin-left:6px;min-height:38px;display:inline-flex;align-items:center;touch-action:manipulation;}
 
@@ -30,7 +27,7 @@
   nav button{background:none;border:none;padding:13px 12px;font-size:13px;font-weight:600;color:#6b7280;cursor:pointer;border-bottom:3px solid transparent;white-space:nowrap;min-height:46px;touch-action:manipulation;}
   nav button.active{color:var(--blue);border-bottom-color:var(--blue);}
 
-  main{max-width:1100px;margin:0 auto;padding:12px;padding-left:calc(12px + env(safe-area-inset-left));padding-right:calc(12px + env(safe-area-inset-right));padding-bottom:calc(24px + env(safe-area-inset-bottom));}
+  main{max-width:1200px;margin:0 auto;padding:12px;padding-left:calc(12px + env(safe-area-inset-left));padding-right:calc(12px + env(safe-area-inset-right));padding-bottom:calc(24px + env(safe-area-inset-bottom));}
   .tab{display:none;}
   .tab.active{display:block;}
 
@@ -38,9 +35,12 @@
   .stat-card{background:#fff;border-radius:12px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,.05);}
   .stat-card .num{font-size:21px;font-weight:800;color:var(--blue);}
   .stat-card .label{font-size:11px;color:#6b7280;margin-top:4px;}
+  .stat-card.warn .num{color:var(--amber);}
+  .stat-card.danger .num{color:var(--red);}
 
   .panel{background:#fff;border-radius:12px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,.05);margin-bottom:16px;}
   .panel h2{margin:0 0 12px;font-size:15px;}
+  .panel h2 small{font-weight:400;color:#9ca3af;font-size:11px;}
 
   .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;align-items:stretch;}
   .toolbar input, .toolbar select{padding:11px 10px;border:1px solid #d1d5db;border-radius:7px;font-size:16px;min-height:44px;}
@@ -54,9 +54,10 @@
   .btn-success{background:var(--green);color:#fff;}
   .btn-sm{padding:8px 11px;font-size:12px;min-height:38px;}
   .btn-block{flex:1 1 100%;}
+  .btn:disabled{opacity:.5;cursor:not-allowed;}
 
   .table-wrap{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;}
-  table{width:100%;min-width:640px;border-collapse:collapse;font-size:13px;}
+  table{width:100%;min-width:760px;border-collapse:collapse;font-size:13px;}
   th, td{text-align:left;padding:10px 8px;border-bottom:1px solid #f3f4f6;white-space:nowrap;}
   th{color:#6b7280;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.03em;}
   tr:hover td{background:#fafbfc;}
@@ -64,35 +65,44 @@
   .thumb-empty{width:38px;height:38px;border-radius:6px;background:#f3f4f6;}
   .actions{white-space:nowrap;}
   .actions button{margin-right:4px;margin-bottom:4px;}
-  .scan-count-badge{display:inline-block;background:#eef2ff;color:var(--blue);font-weight:700;font-size:12px;padding:2px 8px;border-radius:10px;}
+  .count-badge{display:inline-block;background:#eef2ff;color:var(--blue);font-weight:700;font-size:12px;padding:2px 8px;border-radius:10px;}
+  .vertical-chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;background:#f3f4f6;padding:2px 8px;border-radius:20px;}
+  .status-chip{display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;}
+  .status-Available{background:#dcfce7;color:#15803d;}
+  .status-Assigned{background:#dbeafe;color:#1d4ed8;}
+  .status-Maintenance,.status-Repair{background:#fef3c7;color:#92400e;}
+  .status-Lost,.status-Scrapped,.status-Disposed{background:#fee2e2;color:#b91c1c;}
+  .status-Returned{background:#e5e7eb;color:#374151;}
 
   .overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;z-index:50;padding:12px;}
-  .modal{background:#fff;border-radius:12px;padding:20px;width:100%;max-width:420px;max-height:calc(100dvh - 24px);overflow-y:auto;-webkit-overflow-scrolling:touch;}
+  .modal{background:#fff;border-radius:12px;padding:20px;width:100%;max-width:460px;max-height:calc(100dvh - 24px);overflow-y:auto;-webkit-overflow-scrolling:touch;}
+  .modal.wide{max-width:640px;}
   .modal h3{margin:0 0 14px;font-size:17px;}
   .modal label{display:block;font-size:12px;font-weight:600;color:#374151;margin:10px 0 5px;}
   .modal input, .modal select, .modal textarea{width:100%;padding:11px 10px;border:1px solid #d1d5db;border-radius:7px;font-size:16px;font-family:inherit;min-height:44px;}
   .modal textarea{min-height:64px;}
-  .modal-actions{display:flex;gap:8px;margin-top:16px;}
+  .modal-actions{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;}
+  .form-grid{display:grid;grid-template-columns:1fr;gap:0;}
+  .vendor-row{display:flex;gap:6px;align-items:flex-end;}
+  .vendor-row select{flex:1;}
 
   .hidden{display:none !important;}
   .toast{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);background:#111827;color:#fff;padding:12px 20px;border-radius:8px;font-size:14px;display:none;z-index:100;max-width:92%;text-align:center;}
   .empty{color:#9ca3af;text-align:center;padding:26px;font-size:13px;}
   .role-badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;}
-  .role-admin{background:#ede9fe;color:#6d28d9;}
-  .role-scanner{background:#dbeafe;color:#1d4ed8;}
+  .role-super_admin{background:#fce7f3;color:#a21caf;}
+  .role-vertical_admin{background:#ede9fe;color:#6d28d9;}
+  .role-employee{background:#dbeafe;color:#1d4ed8;}
 
-  /* Global search */
   .global-search{position:relative;margin-bottom:16px;}
   .global-search input{width:100%;padding:13px 14px 13px 42px;border:1px solid #d1d5db;border-radius:10px;font-size:15px;min-height:48px;background:#fff url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="%236b7280" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>') no-repeat 13px center;box-shadow:0 2px 8px rgba(0,0,0,.05);}
   .global-search input:focus{outline:2px solid var(--blue);border-color:var(--blue);}
   .search-results{display:none;}
   .search-results.active{display:block;}
-  .search-results h2{display:flex;align-items:center;gap:8px;}
   .search-count{font-size:11px;font-weight:700;background:#eef2ff;color:var(--blue);padding:2px 8px;border-radius:20px;}
   mark{background:#fef08a;color:inherit;border-radius:2px;padding:0 1px;}
   .dashboard-default.hidden{display:none !important;}
 
-  /* Barcode generator */
   .barcode-preview{text-align:center;padding:14px;background:#f8fafc;border-radius:10px;margin-top:12px;}
   .barcode-preview canvas{max-width:100%;}
   .barcode-value{font-family:monospace;font-size:12px;color:#6b7280;margin-top:6px;word-break:break-all;}
@@ -101,6 +111,19 @@
   .field-hint{font-size:11px;color:#9ca3af;margin-top:3px;}
   .required-mark{color:var(--red);}
   .barcode-current{display:flex;align-items:center;justify-content:space-between;gap:8px;background:#f8fafc;padding:9px 10px;border-radius:7px;margin-bottom:6px;flex-wrap:wrap;}
+
+  .qty-control{display:flex;align-items:center;gap:8px;}
+  .qty-control button{width:44px;height:44px;border-radius:8px;border:none;background:#e5e7eb;font-size:20px;font-weight:700;cursor:pointer;}
+  .qty-control .qty-num{font-size:20px;font-weight:800;min-width:52px;text-align:center;}
+  .movement-list{max-height:140px;overflow-y:auto;font-size:12px;border:1px solid #f3f4f6;border-radius:8px;margin-top:8px;}
+  .movement-list .row{display:flex;justify-content:space-between;padding:6px 10px;border-bottom:1px solid #f3f4f6;}
+  .movement-list .row:last-child{border-bottom:none;}
+
+  .assign-box{background:#f8fafc;border-radius:8px;padding:10px;margin-top:6px;}
+  .business-table td, .business-table th{white-space:normal;}
+
+  .vertical-card{display:flex;align-items:center;gap:10px;background:#f8fafc;border-radius:8px;padding:10px;margin-bottom:8px;}
+  .vertical-card .icon{font-size:24px;}
 
   /* Tablet and up */
   @media (min-width: 641px) {
@@ -121,15 +144,13 @@
     .global-search input{font-size:16px;}
     .barcode-actions{flex-direction:row;flex-wrap:wrap;}
     .barcode-actions .btn{flex:1;min-width:110px;width:auto;}
+    .form-grid{grid-template-columns:1fr 1fr;gap:0 14px;}
   }
 
-  /* Desktop */
   @media (min-width: 1000px) {
     .stats{grid-template-columns:repeat(4, 1fr);}
   }
 
-  /* Landscape phones: reclaim vertical space so key controls stay visible
-     without excessive scrolling. */
   @media (max-height: 480px) and (orientation: landscape) {
     header{padding:8px 14px;}
     nav button{padding:10px 12px;min-height:40px;}
@@ -143,20 +164,23 @@
 <body>
 <header>
   <div>
-    <div class="title">AEC Barcode Inventory — Admin Panel</div>
+    <div class="title">AEC Group &mdash; Asset Management</div>
+    <div class="badge" id="scopeBadge"></div>
     <div class="userinfo" id="userinfo"></div>
   </div>
   <div>
-    <a href="/scan.html">Scanner App</a>
+    <a href="/scan.html">Scanner</a>
     <button id="logoutBtn">Logout</button>
   </div>
 </header>
 
-<nav>
+<nav id="mainNav">
   <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
-  <button class="tab-btn" data-tab="products">Products</button>
+  <button class="tab-btn" data-tab="assets">Assets</button>
   <button class="tab-btn" data-tab="history">Scan History</button>
-  <button class="tab-btn" data-tab="users">Users</button>
+  <button class="tab-btn" data-tab="vendors">Vendors</button>
+  <button class="tab-btn" data-tab="businesses" id="navBusinesses">Businesses</button>
+  <button class="tab-btn" data-tab="users" id="navUsers">Users</button>
 </nav>
 
 <main>
@@ -164,26 +188,25 @@
   <!-- DASHBOARD -->
   <section class="tab active" id="tab-dashboard">
     <div class="global-search">
-      <input type="text" id="globalSearch" placeholder="Search everything: product, brand, barcode, category, user, device, date...">
+      <input type="text" id="globalSearch" placeholder="Search everything: asset, barcode, serial, vendor, employee, business...">
     </div>
 
-    <!-- Search results (shown only while searching) -->
     <div class="search-results" id="searchResults">
       <div class="panel">
-        <h2>Matching Products <span class="search-count" id="searchProductsCount">0</span></h2>
+        <h2>Matching Assets <span class="search-count" id="searchAssetsCount">0</span></h2>
         <div class="table-wrap">
         <table>
-          <thead><tr><th></th><th>Barcode</th><th>Product Name</th><th>Brand</th><th>Category</th><th>Position</th><th>Allocated User</th><th>Scans</th></tr></thead>
-          <tbody id="searchProductsBody"></tbody>
+          <thead><tr><th></th><th>Barcode</th><th>Asset Name</th><th>Business</th><th>Serial No.</th><th>Status</th><th>Employee</th></tr></thead>
+          <tbody id="searchAssetsBody"></tbody>
         </table>
         </div>
-        <div class="empty hidden" id="searchProductsEmpty">No matching products.</div>
+        <div class="empty hidden" id="searchAssetsEmpty">No matching assets.</div>
       </div>
       <div class="panel">
         <h2>Matching Scan History <span class="search-count" id="searchScansCount">0</span></h2>
         <div class="table-wrap">
         <table>
-          <thead><tr><th>Date</th><th>Time</th><th>Barcode</th><th>Product</th><th>Scanned By</th><th>Device</th></tr></thead>
+          <thead><tr><th>Date</th><th>Time</th><th>Barcode</th><th>Asset</th><th>Scanned By</th><th>Device</th></tr></thead>
           <tbody id="searchScansBody"></tbody>
         </table>
         </div>
@@ -192,19 +215,54 @@
       <div class="empty hidden" id="searchNoResults">No results found for your search.</div>
     </div>
 
-    <!-- Default dashboard view (hidden while searching) -->
     <div class="dashboard-default" id="dashboardDefault">
-      <div class="stats">
-        <div class="stat-card"><div class="num" id="statProducts">-</div><div class="label">Total Products</div></div>
-        <div class="stat-card"><div class="num" id="statScans">-</div><div class="label">Total Scans</div></div>
-        <div class="stat-card"><div class="num" id="statScansToday">-</div><div class="label">Scans Today</div></div>
-        <div class="stat-card"><div class="num" id="statUsers">-</div><div class="label">Users</div></div>
+      <div class="stats" id="statsGrid"></div>
+
+      <div class="panel hidden" id="businessWisePanel">
+        <h2>Business-wise Assets</h2>
+        <div class="table-wrap">
+        <table class="business-table">
+          <thead><tr><th>Business</th><th>Total</th><th>Assigned</th><th>Available</th><th>Low Stock</th><th>Warranty Expiring</th></tr></thead>
+          <tbody id="businessWiseBody"></tbody>
+        </table>
+        </div>
       </div>
+
+      <div class="panel hidden" id="topUsedPanel">
+        <h2>Top Used Assets</h2>
+        <div class="table-wrap">
+        <table>
+          <thead><tr><th>Asset</th><th>Business</th><th>Times Scanned</th></tr></thead>
+          <tbody id="topUsedBody"></tbody>
+        </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Vendor Summary</h2>
+        <div class="table-wrap">
+        <table>
+          <thead><tr><th>Vendor</th><th>Assets</th></tr></thead>
+          <tbody id="vendorSummaryBody"></tbody>
+        </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Department Summary</h2>
+        <div class="table-wrap">
+        <table>
+          <thead><tr><th>Department</th><th>Assets</th></tr></thead>
+          <tbody id="deptSummaryBody"></tbody>
+        </table>
+        </div>
+      </div>
+
       <div class="panel">
         <h2>Recent Scans</h2>
         <div class="table-wrap">
         <table>
-          <thead><tr><th>Date/Time</th><th>Barcode</th><th>Product</th><th>Scanned By</th><th>Device</th><th>Position</th></tr></thead>
+          <thead><tr><th>Date/Time</th><th>Barcode</th><th>Asset</th><th id="recentBusinessHeader" class="hidden">Business</th><th>Scanned By</th><th>Device</th></tr></thead>
           <tbody id="recentScansBody"></tbody>
         </table>
         </div>
@@ -213,25 +271,32 @@
     </div>
   </section>
 
-  <!-- PRODUCTS -->
-  <section class="tab" id="tab-products">
+  <!-- ASSETS -->
+  <section class="tab" id="tab-assets">
     <div class="panel">
-      <h2>Products</h2>
+      <h2>Assets <small id="assetsScopeLabel"></small></h2>
       <div class="toolbar">
-        <input type="text" id="productSearch" placeholder="Search barcode, name, position, user...">
+        <input type="text" id="assetSearch" placeholder="Search barcode, name, serial, vendor...">
+        <select id="assetStatusFilter">
+          <option value="">All Statuses</option>
+        </select>
+        <select id="assetVerticalFilter" class="hidden">
+          <option value="">All Businesses</option>
+        </select>
         <button class="btn btn-primary btn-block" id="createBarcodeBtn">+ Create Barcode</button>
-        <button class="btn btn-secondary btn-block" id="addProductBtn">+ Add Product (barcode known)</button>
-        <button class="btn btn-secondary" onclick="window.open('/api/export/products.xlsx')">Export Excel</button>
-        <button class="btn btn-secondary" onclick="window.open('/api/export/products.pdf')">Export PDF</button>
+        <button class="btn btn-secondary btn-block" id="addAssetBtn">+ Add Asset (barcode known)</button>
+        <button class="btn btn-secondary" onclick="window.open('/api/export/assets.xlsx')">Excel</button>
+        <button class="btn btn-secondary" onclick="window.open('/api/export/assets.pdf')">PDF</button>
+        <button class="btn btn-secondary" onclick="window.open('/api/export/assets.csv')">CSV</button>
       </div>
-      <p class="toolbar-hint"><b>Create Barcode</b> — for a new item that doesn't have a barcode yet; generates and prints one for you. <b>Add Product</b> — for an item that already has a barcode printed on it.</p>
+      <p class="toolbar-hint"><b>Create Barcode</b> &mdash; for a new asset with no barcode yet; generates and prints one. <b>Add Asset</b> &mdash; for an item that already has a barcode.</p>
       <div class="table-wrap">
       <table>
-        <thead><tr><th></th><th>Barcode</th><th>Product Name</th><th>Brand</th><th>Category</th><th>Position</th><th>Allocated User</th><th>Scans</th><th>Updated</th><th>Actions</th></tr></thead>
-        <tbody id="productsBody"></tbody>
+        <thead><tr><th></th><th>Barcode</th><th>Asset Name</th><th id="assetBusinessHeader" class="hidden">Business</th><th>Category</th><th>Vendor</th><th>Serial No.</th><th>Qty</th><th>Status</th><th>Employee</th><th>Actions</th></tr></thead>
+        <tbody id="assetsBody"></tbody>
       </table>
       </div>
-      <div class="empty hidden" id="productsEmpty">No products found.</div>
+      <div class="empty hidden" id="assetsEmpty">No assets found.</div>
     </div>
   </section>
 
@@ -245,12 +310,13 @@
         <input type="date" id="historyFrom">
         <input type="date" id="historyTo">
         <button class="btn btn-primary" id="applyHistoryFilter">Filter</button>
-        <button class="btn btn-secondary" onclick="window.open('/api/export/scans.xlsx')">Export Excel</button>
-        <button class="btn btn-secondary" onclick="window.open('/api/export/scans.pdf')">Export PDF</button>
+        <button class="btn btn-secondary" onclick="window.open('/api/export/scans.xlsx')">Excel</button>
+        <button class="btn btn-secondary" onclick="window.open('/api/export/scans.pdf')">PDF</button>
+        <button class="btn btn-secondary" onclick="window.open('/api/export/scans.csv')">CSV</button>
       </div>
       <div class="table-wrap">
       <table>
-        <thead><tr><th>Date</th><th>Time</th><th>Barcode</th><th>Product</th><th>Position</th><th>Allocated User</th><th>Scanned By</th><th>Device</th><th>Remarks</th></tr></thead>
+        <thead><tr><th>Date</th><th>Time</th><th>Barcode</th><th>Asset</th><th>Location</th><th>Employee</th><th>Scanned By</th><th>Device</th><th>Remarks</th></tr></thead>
         <tbody id="historyBody"></tbody>
       </table>
       </div>
@@ -258,7 +324,40 @@
     </div>
   </section>
 
-  <!-- USERS -->
+  <!-- VENDORS -->
+  <section class="tab" id="tab-vendors">
+    <div class="panel">
+      <h2>Vendor Master</h2>
+      <div class="toolbar">
+        <input type="text" id="newVendorName" placeholder="New vendor name (e.g. Dell)">
+        <button class="btn btn-primary" id="addVendorBtn">+ Add Vendor</button>
+      </div>
+      <p class="toolbar-hint">Vendors are shared across all businesses. Duplicate names are rejected automatically.</p>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th>Vendor</th><th>Added</th></tr></thead>
+        <tbody id="vendorsBody"></tbody>
+      </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- BUSINESSES (Super Admin only) -->
+  <section class="tab" id="tab-businesses">
+    <div class="panel">
+      <h2>Business Verticals</h2>
+      <div class="toolbar">
+        <input type="text" id="newBizName" placeholder="Business name (e.g. AEC Resorts)">
+        <input type="text" id="newBizCode" placeholder="Short code (e.g. aec-resorts)">
+        <input type="text" id="newBizIcon" placeholder="Icon (emoji, e.g. 🏨)">
+        <button class="btn btn-primary" id="addBizBtn">+ Add Business</button>
+      </div>
+      <p class="toolbar-hint">New businesses appear immediately across the whole system (landing page, dropdowns, user creation) &mdash; no code changes or redeploy needed.</p>
+      <div id="businessesList"></div>
+    </div>
+  </section>
+
+  <!-- USERS (Super Admin only) -->
   <section class="tab" id="tab-users">
     <div class="panel">
       <h2>Add User</h2>
@@ -267,9 +366,11 @@
         <input type="text" id="newUserFullName" placeholder="Full name">
         <input type="password" id="newUserPassword" placeholder="Password">
         <select id="newUserRole">
-          <option value="scanner">Scanner</option>
-          <option value="admin">Admin</option>
+          <option value="employee">Employee</option>
+          <option value="vertical_admin">Vertical Admin</option>
+          <option value="super_admin">Super Admin</option>
         </select>
+        <select id="newUserVertical"></select>
         <button class="btn btn-primary" id="addUserBtn">+ Add User</button>
       </div>
     </div>
@@ -277,7 +378,7 @@
       <h2>All Users</h2>
       <div class="table-wrap">
       <table>
-        <thead><tr><th>Username</th><th>Full Name</th><th>Role</th><th>Created</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Username</th><th>Full Name</th><th>Role</th><th>Business</th><th>Created</th><th>Actions</th></tr></thead>
         <tbody id="usersBody"></tbody>
       </table>
       </div>
@@ -286,54 +387,83 @@
 
 </main>
 
-<!-- Edit Product Modal -->
+<!-- Edit Asset Modal -->
 <div class="overlay hidden" id="editOverlay">
-  <div class="modal">
-    <h3>Edit Product</h3>
+  <div class="modal wide">
+    <h3>Edit Asset</h3>
     <div class="barcode-current">
       <span id="editBarcodeLabel" style="font-family:monospace;color:#6b7280;font-size:13px;"></span>
       <button class="btn btn-secondary btn-sm" id="regenerateBarcodeBtn" type="button">Regenerate Barcode</button>
     </div>
-    <label>Product Name</label>
-    <input type="text" id="editName">
-    <label>Brand Name</label>
-    <input type="text" id="editBrand">
-    <label>Category</label>
-    <input type="text" id="editCategory">
-    <label>Product Variant <span class="field-hint" style="display:inline;">(optional)</span></label>
-    <input type="text" id="editVariant">
-    <label>Serial Number <span class="field-hint" style="display:inline;">(optional)</span></label>
-    <input type="text" id="editSerial">
-    <label>Position / Location</label>
-    <input type="text" id="editPosition">
-    <label>Allocated User</label>
-    <input type="text" id="editAllocated">
+
+    <div class="form-grid">
+      <div><label>Asset Name</label><input type="text" id="editName"></div>
+      <div><label>Category</label><input type="text" id="editCategory"></div>
+      <div>
+        <label>Vendor</label>
+        <div class="vendor-row"><select id="editVendor"><option value="">-- None --</option></select></div>
+      </div>
+      <div><label>Brand</label><input type="text" id="editBrand"></div>
+      <div><label>Model</label><input type="text" id="editModel"></div>
+      <div><label>Serial Number <span class="required-mark">*</span></label><input type="text" id="editSerial"></div>
+      <div><label>Purchase Date</label><input type="date" id="editPurchaseDate"></div>
+      <div><label>Warranty Expiry</label><input type="date" id="editWarrantyExpiry"></div>
+      <div><label>Location</label><input type="text" id="editLocation"></div>
+      <div><label>Department</label><input type="text" id="editDepartment"></div>
+      <div>
+        <label>Status</label>
+        <select id="editStatus"></select>
+      </div>
+      <div><label>Assigned Employee (display)</label><input type="text" id="editAssignedEmployee" disabled></div>
+    </div>
     <label>Remarks</label>
-    <textarea id="editRemarks" rows="3"></textarea>
+    <textarea id="editRemarks" rows="2"></textarea>
+
+    <label>Quantity</label>
+    <div class="qty-control">
+      <button type="button" id="qtyMinusBtn">&minus;</button>
+      <div class="qty-num" id="editQtyNum">0</div>
+      <button type="button" id="qtyPlusBtn">+</button>
+      <input type="text" id="qtyReason" placeholder="Reason (e.g. received stock, usage)" style="flex:1;min-height:38px;padding:8px;">
+    </div>
+    <div class="movement-list hidden" id="movementList"></div>
+
+    <label>Assignment</label>
+    <div class="assign-box" id="assignBox"></div>
+
     <div class="modal-actions">
       <button class="btn btn-success" id="saveEditBtn" style="flex:1;">Save</button>
       <button class="btn btn-secondary" id="cancelEditBtn" style="flex:1;">Cancel</button>
+      <button class="btn btn-danger hidden" id="deleteAssetBtn">Delete</button>
     </div>
   </div>
 </div>
 
 <!-- Create Barcode Modal -->
 <div class="overlay hidden" id="createBarcodeOverlay">
-  <div class="modal">
+  <div class="modal wide">
     <h3>Create Barcode</h3>
     <div id="createBarcodeForm">
-      <label>Product Name <span class="required-mark">*</span></label>
-      <input type="text" id="cbName">
-      <label>Brand Name <span class="required-mark">*</span></label>
-      <input type="text" id="cbBrand">
-      <label>Category <span class="required-mark">*</span></label>
-      <input type="text" id="cbCategory">
-      <label>Product Variant <span class="field-hint" style="display:inline;">(optional — e.g. size, color, capacity)</span></label>
-      <input type="text" id="cbVariant">
-      <label>Serial Number <span class="field-hint" style="display:inline;">(optional)</span></label>
-      <input type="text" id="cbSerial">
-      <label>Location <span class="field-hint" style="display:inline;">(optional)</span></label>
-      <input type="text" id="cbLocation">
+      <div class="form-grid">
+        <div><label>Asset Name <span class="required-mark">*</span></label><input type="text" id="cbName"></div>
+        <div class="hidden" id="cbVerticalWrap">
+          <label>Business Vertical <span class="required-mark">*</span></label>
+          <select id="cbVertical"></select>
+        </div>
+        <div><label>Category</label><input type="text" id="cbCategory"></div>
+        <div><label>Vendor</label><select id="cbVendor"><option value="">-- None --</option></select></div>
+        <div><label>Brand</label><input type="text" id="cbBrand"></div>
+        <div><label>Model</label><input type="text" id="cbModel"></div>
+        <div><label>Serial Number <span class="required-mark">*</span></label><input type="text" id="cbSerial"></div>
+        <div><label>Quantity</label><input type="number" id="cbQuantity" value="1" min="0"></div>
+        <div><label>Purchase Date</label><input type="date" id="cbPurchaseDate"></div>
+        <div><label>Warranty Expiry</label><input type="date" id="cbWarrantyExpiry"></div>
+        <div><label>Location</label><input type="text" id="cbLocation"></div>
+        <div><label>Department</label><input type="text" id="cbDepartment"></div>
+        <div><label>Assigned Employee <span class="field-hint" style="display:inline;">(optional)</span></label><input type="text" id="cbAssignedEmployee"></div>
+      </div>
+      <label>Remarks</label>
+      <textarea id="cbRemarks" rows="2"></textarea>
       <div class="modal-actions">
         <button class="btn btn-primary" id="generateBarcodeBtn" style="flex:1;">Generate Barcode</button>
         <button class="btn btn-secondary" id="cancelCreateBarcodeBtn" style="flex:1;">Cancel</button>
@@ -356,20 +486,31 @@
   </div>
 </div>
 
-<!-- Add Product Modal -->
+<!-- Add Asset Modal -->
 <div class="overlay hidden" id="addOverlay">
-  <div class="modal">
-    <h3>Add Product</h3>
-    <label>Barcode</label>
-    <input type="text" id="addBarcode">
-    <label>Product Name</label>
-    <input type="text" id="addName">
-    <label>Position / Location</label>
-    <input type="text" id="addPosition">
-    <label>Allocated User</label>
-    <input type="text" id="addAllocated">
+  <div class="modal wide">
+    <h3>Add Asset</h3>
+    <div class="form-grid">
+      <div><label>Barcode <span class="required-mark">*</span></label><input type="text" id="addBarcode"></div>
+      <div><label>Asset Name <span class="required-mark">*</span></label><input type="text" id="addName"></div>
+      <div class="hidden" id="addVerticalWrap">
+        <label>Business Vertical <span class="required-mark">*</span></label>
+        <select id="addVertical"></select>
+      </div>
+      <div><label>Category</label><input type="text" id="addCategory"></div>
+      <div><label>Vendor</label><select id="addVendor"><option value="">-- None --</option></select></div>
+      <div><label>Brand</label><input type="text" id="addBrand"></div>
+      <div><label>Model</label><input type="text" id="addModel"></div>
+      <div><label>Serial Number <span class="required-mark">*</span></label><input type="text" id="addSerial"></div>
+      <div><label>Quantity</label><input type="number" id="addQuantity" value="1" min="0"></div>
+      <div><label>Purchase Date</label><input type="date" id="addPurchaseDate"></div>
+      <div><label>Warranty Expiry</label><input type="date" id="addWarrantyExpiry"></div>
+      <div><label>Location</label><input type="text" id="addLocation"></div>
+      <div><label>Department</label><input type="text" id="addDepartment"></div>
+      <div><label>Assigned Employee</label><input type="text" id="addAssignedEmployee"></div>
+    </div>
     <label>Remarks</label>
-    <textarea id="addRemarks" rows="3"></textarea>
+    <textarea id="addRemarks" rows="2"></textarea>
     <div class="modal-actions">
       <button class="btn btn-success" id="saveAddBtn" style="flex:1;">Save</button>
       <button class="btn btn-secondary" id="cancelAddBtn" style="flex:1;">Cancel</button>
@@ -377,21 +518,21 @@
   </div>
 </div>
 
-<!-- Barcode Label Print Area (hidden, used only when printing) -->
-<div id="printLabelArea" class="hidden"></div>
-
 <div class="toast" id="toast"></div>
 
 <script>
+const STATUS_OPTIONS = ['Available','Assigned','Maintenance','Repair','Lost','Scrapped','Returned','Disposed'];
 let currentUser = null;
-let productsCache = [];
+let assetsCache = [];
+let verticalsCache = [];
+let vendorsCache = [];
 
 function toast(msg, ok = true) {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.style.background = ok ? '#111827' : '#dc2626';
   t.style.display = 'block';
-  setTimeout(() => (t.style.display = 'none'), 2500);
+  setTimeout(() => (t.style.display = 'none'), 2800);
 }
 
 async function api(url, opts) {
@@ -402,6 +543,10 @@ async function api(url, opts) {
   return data;
 }
 
+function isSuperAdmin() { return currentUser && currentUser.role === 'super_admin'; }
+function isVerticalAdmin() { return currentUser && currentUser.role === 'vertical_admin'; }
+function canDelete() { return isSuperAdmin(); }
+
 async function init() {
   let me;
   try {
@@ -411,12 +556,44 @@ async function init() {
     return;
   }
   currentUser = me.user;
-  if (currentUser.role !== 'admin') {
-    alert('Admin access required. Redirecting to scanner app.');
+  if (currentUser.role === 'employee') {
     window.location.href = '/scan.html';
     return;
   }
-  document.getElementById('userinfo').textContent = `${currentUser.full_name} (${currentUser.role})`;
+  document.getElementById('userinfo').textContent = `${currentUser.full_name} (${currentUser.role.replace('_',' ')})`;
+  const scopeBadge = document.getElementById('scopeBadge');
+  if (isSuperAdmin()) {
+    scopeBadge.textContent = '🌐 All Businesses';
+  } else {
+    scopeBadge.textContent = `${currentUser.vertical.icon || '🏢'} ${currentUser.vertical.name}`;
+  }
+
+  if (!isSuperAdmin()) {
+    document.getElementById('navUsers').remove();
+    document.getElementById('navBusinesses').remove();
+  } else {
+    document.getElementById('assetBusinessHeader').classList.remove('hidden');
+    document.getElementById('recentBusinessHeader').classList.remove('hidden');
+    document.getElementById('assetVerticalFilter').classList.remove('hidden');
+    document.getElementById('cbVerticalWrap').classList.remove('hidden');
+    document.getElementById('addVerticalWrap').classList.remove('hidden');
+    document.getElementById('businessWisePanel').classList.remove('hidden');
+    document.getElementById('topUsedPanel').classList.remove('hidden');
+    document.getElementById('assetsScopeLabel').textContent = '(all businesses)';
+  }
+
+  const statusSelect = document.getElementById('assetStatusFilter');
+  STATUS_OPTIONS.forEach((s) => {
+    const opt = document.createElement('option');
+    opt.value = s; opt.textContent = s;
+    statusSelect.appendChild(opt);
+  });
+  const editStatusSelect = document.getElementById('editStatus');
+  STATUS_OPTIONS.forEach((s) => {
+    const opt = document.createElement('option');
+    opt.value = s; opt.textContent = s;
+    editStatusSelect.appendChild(opt);
+  });
 
   document.querySelectorAll('.tab-btn').forEach((btn) => {
     btn.addEventListener('click', () => switchTab(btn.dataset.tab));
@@ -427,20 +604,25 @@ async function init() {
     window.location.href = '/login.html';
   });
 
+  await loadVerticals();
+  await loadVendors();
   loadDashboard();
-  loadProducts();
-  loadUsers();
+  loadAssets();
 
-  document.getElementById('productSearch').addEventListener('input', debounce(() => loadProducts(), 300));
-  document.getElementById('addProductBtn').addEventListener('click', () => openAddModal());
+  document.getElementById('assetSearch').addEventListener('input', debounce(() => loadAssets(), 300));
+  document.getElementById('assetStatusFilter').addEventListener('change', loadAssets);
+  document.getElementById('assetVerticalFilter').addEventListener('change', loadAssets);
+  document.getElementById('addAssetBtn').addEventListener('click', () => openAddModal());
   document.getElementById('applyHistoryFilter').addEventListener('click', loadHistory);
-  document.getElementById('addUserBtn').addEventListener('click', addUser);
 
   document.getElementById('saveEditBtn').addEventListener('click', saveEdit);
   document.getElementById('cancelEditBtn').addEventListener('click', closeEditModal);
   document.getElementById('saveAddBtn').addEventListener('click', saveAdd);
   document.getElementById('cancelAddBtn').addEventListener('click', closeAddModal);
   document.getElementById('regenerateBarcodeBtn').addEventListener('click', regenerateBarcode);
+  document.getElementById('deleteAssetBtn').addEventListener('click', deleteAssetFromEdit);
+  document.getElementById('qtyPlusBtn').addEventListener('click', () => adjustQuantityFromEdit(1));
+  document.getElementById('qtyMinusBtn').addEventListener('click', () => adjustQuantityFromEdit(-1));
 
   document.getElementById('createBarcodeBtn').addEventListener('click', openCreateBarcodeModal);
   document.getElementById('cancelCreateBarcodeBtn').addEventListener('click', closeCreateBarcodeModal);
@@ -451,6 +633,16 @@ async function init() {
   document.getElementById('printGeneratedBtn').addEventListener('click', printGeneratedBarcode);
 
   document.getElementById('globalSearch').addEventListener('input', debounce(runGlobalSearch, 300));
+  document.getElementById('addVendorBtn').addEventListener('click', addVendor);
+
+  if (isSuperAdmin()) {
+    document.getElementById('addUserBtn').addEventListener('click', addUser);
+    document.getElementById('addBizBtn').addEventListener('click', addBusiness);
+    document.getElementById('newUserRole').addEventListener('change', updateUserVerticalVisibility);
+    updateUserVerticalVisibility();
+    loadUsers();
+    loadBusinesses();
+  }
 }
 
 function debounce(fn, ms) {
@@ -463,170 +655,383 @@ function switchTab(tab) {
   document.querySelectorAll('.tab').forEach((s) => s.classList.toggle('active', s.id === 'tab-' + tab));
   if (tab === 'history') loadHistory();
   if (tab === 'dashboard') loadDashboard();
+  if (tab === 'vendors') loadVendors();
+  if (tab === 'businesses' && isSuperAdmin()) loadBusinesses();
+  if (tab === 'users' && isSuperAdmin()) loadUsers();
+}
+
+// ---------- LOOKUPS ----------
+async function loadVerticals() {
+  const data = await api('/api/verticals');
+  verticalsCache = data.verticals;
+  ['cbVertical', 'addVertical', 'assetVerticalFilter', 'newUserVertical'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const keepFirst = id === 'assetVerticalFilter';
+    el.innerHTML = keepFirst ? '<option value="">All Businesses</option>' : '';
+    verticalsCache.forEach((v) => {
+      const opt = document.createElement('option');
+      opt.value = v.id;
+      opt.textContent = `${v.icon || ''} ${v.name}`.trim();
+      el.appendChild(opt);
+    });
+  });
+}
+
+async function loadVendors() {
+  const data = await api('/api/vendors');
+  vendorsCache = data.vendors;
+  ['cbVendor', 'addVendor', 'editVendor'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML = '<option value="">-- None --</option>';
+    vendorsCache.forEach((v) => {
+      const opt = document.createElement('option');
+      opt.value = v.id;
+      opt.textContent = v.name;
+      el.appendChild(opt);
+    });
+  });
+  const body = document.getElementById('vendorsBody');
+  if (body) {
+    body.innerHTML = '';
+    vendorsCache.forEach((v) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${esc(v.name)}</td><td>${new Date(v.created_at).toLocaleDateString()}</td>`;
+      body.appendChild(tr);
+    });
+  }
+}
+
+async function addVendor() {
+  const name = document.getElementById('newVendorName').value.trim();
+  if (!name) { toast('Vendor name required', false); return; }
+  try {
+    await api('/api/vendors', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+    toast('Vendor added');
+    document.getElementById('newVendorName').value = '';
+    loadVendors();
+  } catch (e) { toast(e.message, false); }
 }
 
 // ---------- DASHBOARD ----------
 async function loadDashboard() {
   const stats = await api('/api/stats');
-  document.getElementById('statProducts').textContent = stats.totalProducts;
-  document.getElementById('statScans').textContent = stats.totalScans;
-  document.getElementById('statScansToday').textContent = stats.scansToday;
-  document.getElementById('statUsers').textContent = stats.totalUsers;
+  const grid = document.getElementById('statsGrid');
+
+  const cards = [
+    ['Total Assets', stats.totalAssets, ''],
+    ['Assigned', stats.assignedAssets, ''],
+    ['Available', stats.availableAssets, ''],
+    ['Low Stock', stats.lowStockAssets, 'warn'],
+    ['Warranty Expiring (30d)', stats.warrantyExpiringAssets, 'warn']
+  ];
+  if (stats.scope === 'vertical') {
+    cards.push(['Maintenance', stats.maintenanceAssets, 'warn']);
+    cards.push(['Lost', stats.lostAssets, 'danger']);
+    cards.push(['Scrapped', stats.scrappedAssets, 'danger']);
+    cards.push(['Total Quantity', stats.totalQuantity, '']);
+  } else {
+    cards.push(['Employees & Admins', stats.totalEmployees, '']);
+  }
+
+  grid.innerHTML = cards.map(([label, num, cls]) => `
+    <div class="stat-card ${cls}"><div class="num">${num ?? 0}</div><div class="label">${label}</div></div>
+  `).join('');
+
+  if (stats.scope === 'global') {
+    const bwBody = document.getElementById('businessWiseBody');
+    bwBody.innerHTML = stats.businessWise.map((b) => `
+      <tr>
+        <td><span class="vertical-chip">${b.vertical.icon || ''} ${esc(b.vertical.name)}</span></td>
+        <td>${b.totalAssets}</td><td>${b.assignedAssets}</td><td>${b.availableAssets}</td>
+        <td>${b.lowStockAssets}</td><td>${b.warrantyExpiringAssets}</td>
+      </tr>`).join('');
+
+    const topBody = document.getElementById('topUsedBody');
+    topBody.innerHTML = (stats.topUsedAssets || []).map((a) => `
+      <tr><td>${esc(a.asset_name)}</td><td>${esc(a.vertical_name)}</td><td><span class="count-badge">${a.scan_count || 0}</span></td></tr>
+    `).join('') || '<tr><td colspan="3" class="empty">No scans yet.</td></tr>';
+  }
+
+  const vendorBody = document.getElementById('vendorSummaryBody');
+  vendorBody.innerHTML = Object.entries(stats.byVendor || {}).sort((a,b) => b[1]-a[1]).map(([k,v]) => `<tr><td>${esc(k)}</td><td>${v}</td></tr>`).join('') || '<tr><td colspan="2" class="empty">No data yet.</td></tr>';
+
+  const deptBody = document.getElementById('deptSummaryBody');
+  deptBody.innerHTML = Object.entries(stats.byDepartment || {}).sort((a,b) => b[1]-a[1]).map(([k,v]) => `<tr><td>${esc(k)}</td><td>${v}</td></tr>`).join('') || '<tr><td colspan="2" class="empty">No data yet.</td></tr>';
 
   const body = document.getElementById('recentScansBody');
   body.innerHTML = '';
-  stats.recentScans.forEach((s) => {
+  (stats.recentScans || []).forEach((s) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${s.scan_date} ${s.scan_time}</td><td>${esc(s.barcode)}</td><td>${esc(s.product_name)}</td><td>${esc(s.scanned_by)}</td><td>${esc(s.device_name)}</td><td>${esc(s.position || '-')}</td>`;
+    const bizCell = isSuperAdmin() ? `<td>${s.vertical_icon || ''} ${esc(s.vertical_name || '')}</td>` : '';
+    tr.innerHTML = `<td>${s.scan_date} ${s.scan_time}</td><td>${esc(s.barcode)}</td><td>${esc(s.asset_name)}</td>${bizCell}<td>${esc(s.scanned_by)}</td><td>${esc(s.device_name)}</td>`;
     body.appendChild(tr);
   });
-  document.getElementById('recentScansEmpty').classList.toggle('hidden', stats.recentScans.length > 0);
+  document.getElementById('recentScansEmpty').classList.toggle('hidden', (stats.recentScans || []).length > 0);
 }
 
-// ---------- PRODUCTS ----------
-async function loadProducts() {
-  const q = document.getElementById('productSearch').value.trim();
-  const url = q ? `/api/products?q=${encodeURIComponent(q)}` : '/api/products';
-  const data = await api(url);
-  productsCache = data.products;
-  const body = document.getElementById('productsBody');
+// ---------- ASSETS ----------
+function statusChip(status) {
+  return `<span class="status-chip status-${status}">${esc(status)}</span>`;
+}
+
+async function loadAssets() {
+  const q = document.getElementById('assetSearch').value.trim();
+  const status = document.getElementById('assetStatusFilter').value;
+  const vertical_id = document.getElementById('assetVerticalFilter').value;
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (status) params.set('status', status);
+  if (vertical_id) params.set('vertical_id', vertical_id);
+
+  const data = await api('/api/assets?' + params.toString());
+  assetsCache = data.assets;
+  const body = document.getElementById('assetsBody');
   body.innerHTML = '';
-  data.products.forEach((p) => {
+  data.assets.forEach((a) => {
     const tr = document.createElement('tr');
-    const img = p.image_path ? `<img class="thumb" src="${p.image_path}">` : `<div class="thumb-empty"></div>`;
+    const img = a.image_path ? `<img class="thumb" src="${a.image_path}">` : `<div class="thumb-empty"></div>`;
+    const bizCell = isSuperAdmin() ? `<td><span class="vertical-chip">${a.vertical_icon || ''} ${esc(a.vertical_name)}</span></td>` : '';
     tr.innerHTML = `
       <td>${img}</td>
-      <td style="font-family:monospace">${esc(p.barcode)}</td>
-      <td>${esc(p.product_name)}</td>
-      <td>${esc(p.brand_name || '-')}</td>
-      <td>${esc(p.category || '-')}</td>
-      <td>${esc(p.position || '-')}</td>
-      <td>${esc(p.allocated_user || '-')}</td>
-      <td><span class="scan-count-badge">${p.scan_count || 0}</span></td>
-      <td>${new Date(p.updated_at).toLocaleDateString()}</td>
+      <td style="font-family:monospace">${esc(a.barcode)}</td>
+      <td>${esc(a.asset_name)}</td>
+      ${bizCell}
+      <td>${esc(a.category || '-')}</td>
+      <td>${esc(a.vendor_name || '-')}</td>
+      <td style="font-family:monospace">${esc(a.serial_number)}</td>
+      <td>${a.quantity}</td>
+      <td>${statusChip(a.status)}</td>
+      <td>${esc(a.assigned_employee || '-')}</td>
       <td class="actions">
-        <button class="btn btn-secondary btn-sm" onclick="openEditModal(${p.id})">Edit</button>
-        <button class="btn btn-secondary btn-sm" onclick="printLabel(${p.id})">Label</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteProduct(${p.id})">Delete</button>
+        <button class="btn btn-secondary btn-sm" onclick="openEditModal(${a.id})">Edit</button>
+        <button class="btn btn-secondary btn-sm" onclick="printLabel(${a.id})">Label</button>
       </td>`;
     body.appendChild(tr);
   });
-  document.getElementById('productsEmpty').classList.toggle('hidden', data.products.length > 0);
+  document.getElementById('assetsEmpty').classList.toggle('hidden', data.assets.length > 0);
 }
 
-function openEditModal(id) {
-  const p = productsCache.find((x) => x.id === id);
-  if (!p) return;
-  document.getElementById('editOverlay').dataset.id = id;
-  document.getElementById('editBarcodeLabel').textContent = p.barcode;
-  document.getElementById('editName').value = p.product_name;
-  document.getElementById('editBrand').value = p.brand_name || '';
-  document.getElementById('editCategory').value = p.category || '';
-  document.getElementById('editVariant').value = p.variant || '';
-  document.getElementById('editSerial').value = p.serial_number || '';
-  document.getElementById('editPosition').value = p.position || '';
-  document.getElementById('editAllocated').value = p.allocated_user || '';
-  document.getElementById('editRemarks').value = p.remarks || '';
-  document.getElementById('editOverlay').classList.remove('hidden');
+function requiredVerticalIdFor(selectId) {
+  if (!isSuperAdmin()) return undefined;
+  const val = document.getElementById(selectId).value;
+  return val ? Number(val) : undefined;
 }
-function closeEditModal() { document.getElementById('editOverlay').classList.add('hidden'); }
+
+// ---- Edit modal ----
+let editingAssetId = null;
+let editingAsset = null;
+
+async function openEditModal(id) {
+  const a = assetsCache.find((x) => x.id === id);
+  if (!a) return;
+  editingAssetId = id;
+  editingAsset = a;
+  document.getElementById('editBarcodeLabel').textContent = a.barcode;
+  document.getElementById('editName').value = a.asset_name;
+  document.getElementById('editCategory').value = a.category || '';
+  document.getElementById('editVendor').value = a.vendor_id || '';
+  document.getElementById('editBrand').value = a.brand || '';
+  document.getElementById('editModel').value = a.model || '';
+  document.getElementById('editSerial').value = a.serial_number;
+  document.getElementById('editPurchaseDate').value = a.purchase_date ? String(a.purchase_date).slice(0,10) : '';
+  document.getElementById('editWarrantyExpiry').value = a.warranty_expiry ? String(a.warranty_expiry).slice(0,10) : '';
+  document.getElementById('editLocation').value = a.location || '';
+  document.getElementById('editDepartment').value = a.department || '';
+  document.getElementById('editStatus').value = a.status;
+  document.getElementById('editAssignedEmployee').value = a.assigned_employee || '(none)';
+  document.getElementById('editRemarks').value = a.remarks || '';
+  document.getElementById('editQtyNum').textContent = a.quantity;
+  document.getElementById('qtyReason').value = '';
+  document.getElementById('deleteAssetBtn').classList.toggle('hidden', !canDelete());
+
+  renderAssignBox(a);
+  document.getElementById('movementList').classList.add('hidden');
+  document.getElementById('editOverlay').classList.remove('hidden');
+
+  try {
+    const { movements } = await api(`/api/assets/${id}/quantity-movements`);
+    const list = document.getElementById('movementList');
+    if (movements.length) {
+      list.innerHTML = movements.slice(0, 15).map((m) => `
+        <div class="row"><span>${m.change_amount > 0 ? '+' : ''}${m.change_amount} → ${m.new_quantity}${m.reason ? ' — ' + esc(m.reason) : ''}</span><span>${new Date(m.created_at).toLocaleDateString()}</span></div>
+      `).join('');
+      list.classList.remove('hidden');
+    }
+  } catch (e) {}
+}
+function closeEditModal() { document.getElementById('editOverlay').classList.add('hidden'); editingAssetId = null; }
+
+function renderAssignBox(a) {
+  const box = document.getElementById('assignBox');
+  if (a.status === 'Assigned' && a.assigned_employee) {
+    box.innerHTML = `
+      <div style="margin-bottom:8px;">Currently assigned to <b>${esc(a.assigned_employee)}</b>${a.department ? ' (' + esc(a.department) + ')' : ''}.</div>
+      <button class="btn btn-secondary btn-sm" onclick="returnAsset(${a.id})">Mark Returned</button>
+    `;
+  } else {
+    box.innerHTML = `
+      <input type="text" id="assignEmployeeName" placeholder="Employee name" style="margin-bottom:6px;">
+      <input type="text" id="assignDepartment" placeholder="Department (optional)" style="margin-bottom:6px;">
+      <button class="btn btn-primary btn-sm" onclick="assignAsset(${a.id})">Assign</button>
+    `;
+  }
+}
+
+async function assignAsset(id) {
+  const employee_name = document.getElementById('assignEmployeeName').value.trim();
+  const department = document.getElementById('assignDepartment').value.trim();
+  if (!employee_name) { toast('Employee name required', false); return; }
+  try {
+    const data = await api(`/api/assets/${id}/assign`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ employee_name, department })
+    });
+    toast('Asset assigned');
+    editingAsset = data.asset;
+    renderAssignBox(data.asset);
+    document.getElementById('editStatus').value = data.asset.status;
+    document.getElementById('editAssignedEmployee').value = data.asset.assigned_employee;
+    loadAssets();
+  } catch (e) { toast(e.message, false); }
+}
+
+async function returnAsset(id) {
+  if (!confirm('Mark this asset as returned?')) return;
+  try {
+    const data = await api(`/api/assets/${id}/return`, { method: 'POST' });
+    toast('Asset returned');
+    editingAsset = data.asset;
+    renderAssignBox(data.asset);
+    document.getElementById('editStatus').value = data.asset.status;
+    document.getElementById('editAssignedEmployee').value = '(none)';
+    loadAssets();
+  } catch (e) { toast(e.message, false); }
+}
+
+async function adjustQuantityFromEdit(delta) {
+  if (!editingAssetId) return;
+  const reason = document.getElementById('qtyReason').value.trim();
+  try {
+    const data = await api(`/api/assets/${editingAssetId}/quantity`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ delta, reason })
+    });
+    document.getElementById('editQtyNum').textContent = data.asset.quantity;
+    toast(delta > 0 ? 'Stock received' : 'Stock used');
+    loadAssets();
+    openEditModal(editingAssetId);
+  } catch (e) { toast(e.message, false); }
+}
 
 async function saveEdit() {
-  const id = document.getElementById('editOverlay').dataset.id;
+  const id = editingAssetId;
   try {
-    await api(`/api/products/${id}`, {
+    await api(`/api/assets/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        product_name: document.getElementById('editName').value,
-        brand_name: document.getElementById('editBrand').value,
+        asset_name: document.getElementById('editName').value,
         category: document.getElementById('editCategory').value,
-        variant: document.getElementById('editVariant').value,
+        vendor_id: document.getElementById('editVendor').value || null,
+        brand: document.getElementById('editBrand').value,
+        model: document.getElementById('editModel').value,
         serial_number: document.getElementById('editSerial').value,
-        position: document.getElementById('editPosition').value,
-        allocated_user: document.getElementById('editAllocated').value,
+        purchase_date: document.getElementById('editPurchaseDate').value || null,
+        warranty_expiry: document.getElementById('editWarrantyExpiry').value || null,
+        location: document.getElementById('editLocation').value,
+        department: document.getElementById('editDepartment').value,
+        status: document.getElementById('editStatus').value,
         remarks: document.getElementById('editRemarks').value
       })
     });
-    toast('Product updated');
+    toast('Asset updated');
     closeEditModal();
-    loadProducts();
+    loadAssets();
+    loadDashboard();
   } catch (e) { toast(e.message, false); }
 }
 
 async function regenerateBarcode() {
-  const id = document.getElementById('editOverlay').dataset.id;
-  if (!id) return;
-  if (!confirm('Regenerate the barcode for this product? The old barcode will stop working, so re-print any label already stuck on this item.')) return;
+  if (!editingAssetId) return;
+  if (!confirm('Regenerate the barcode for this asset? The old barcode will stop working, so re-print any label already stuck on this item.')) return;
   try {
-    const data = await api(`/api/products/${id}/regenerate-barcode`, { method: 'POST' });
-    document.getElementById('editBarcodeLabel').textContent = data.product.barcode;
-    const idx = productsCache.findIndex((x) => x.id === Number(id));
-    if (idx > -1) productsCache[idx] = data.product;
+    const data = await api(`/api/assets/${editingAssetId}/regenerate-barcode`, { method: 'POST' });
+    document.getElementById('editBarcodeLabel').textContent = data.asset.barcode;
     toast('Barcode regenerated');
-    loadProducts();
+    loadAssets();
   } catch (e) { toast(e.message, false); }
 }
 
+async function deleteAssetFromEdit() {
+  if (!editingAssetId) return;
+  if (!confirm('Move this asset to the Recycle Bin? It will be soft-deleted (not permanently erased) and can be restored later.')) return;
+  try {
+    await api(`/api/assets/${editingAssetId}`, { method: 'DELETE' });
+    toast('Asset moved to Recycle Bin');
+    closeEditModal();
+    loadAssets();
+    loadDashboard();
+  } catch (e) { toast(e.message, false); }
+}
+
+// ---- Add modal ----
 function openAddModal() {
-  document.getElementById('addBarcode').value = '';
-  document.getElementById('addName').value = '';
-  document.getElementById('addPosition').value = '';
-  document.getElementById('addAllocated').value = '';
-  document.getElementById('addRemarks').value = '';
+  ['addBarcode','addName','addCategory','addBrand','addModel','addSerial','addPurchaseDate','addWarrantyExpiry','addLocation','addDepartment','addAssignedEmployee','addRemarks'].forEach((id) => document.getElementById(id).value = '');
+  document.getElementById('addQuantity').value = 1;
+  document.getElementById('addVendor').value = '';
   document.getElementById('addOverlay').classList.remove('hidden');
 }
 function closeAddModal() { document.getElementById('addOverlay').classList.add('hidden'); }
 
 async function saveAdd() {
   const barcode = document.getElementById('addBarcode').value.trim();
-  const product_name = document.getElementById('addName').value.trim();
-  if (!barcode || !product_name) { toast('Barcode and product name required', false); return; }
+  const asset_name = document.getElementById('addName').value.trim();
+  const serial_number = document.getElementById('addSerial').value.trim();
+  if (!barcode || !asset_name || !serial_number) { toast('Barcode, Asset Name and Serial Number are required', false); return; }
+  const vertical_id = requiredVerticalIdFor('addVertical');
+  if (isSuperAdmin() && !vertical_id) { toast('Business Vertical is required', false); return; }
   try {
-    await api('/api/products', {
+    await api('/api/assets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        barcode, product_name,
-        position: document.getElementById('addPosition').value,
-        allocated_user: document.getElementById('addAllocated').value,
+        barcode, asset_name, serial_number, vertical_id,
+        category: document.getElementById('addCategory').value,
+        vendor_id: document.getElementById('addVendor').value || null,
+        brand: document.getElementById('addBrand').value,
+        model: document.getElementById('addModel').value,
+        quantity: Number(document.getElementById('addQuantity').value) || 1,
+        purchase_date: document.getElementById('addPurchaseDate').value || null,
+        warranty_expiry: document.getElementById('addWarrantyExpiry').value || null,
+        location: document.getElementById('addLocation').value,
+        department: document.getElementById('addDepartment').value,
+        assigned_employee: document.getElementById('addAssignedEmployee').value,
         remarks: document.getElementById('addRemarks').value
       })
     });
-    toast('Product added');
+    toast('Asset added');
     closeAddModal();
-    loadProducts();
-    loadDashboard();
-  } catch (e) { toast(e.message, false); }
-}
-
-async function deleteProduct(id) {
-  if (!confirm('Delete this product? This cannot be undone.')) return;
-  try {
-    await api(`/api/products/${id}`, { method: 'DELETE' });
-    toast('Product deleted');
-    loadProducts();
+    loadAssets();
     loadDashboard();
   } catch (e) { toast(e.message, false); }
 }
 
 function printLabel(id) {
-  const p = productsCache.find((x) => x.id === id);
-  if (!p) return;
-  // Render the barcode to an offscreen canvas in THIS document first (avoids
-  // manipulating DOM nodes across windows, which some browsers block), then
-  // embed the resulting image as a data URL in the popup window.
+  const a = assetsCache.find((x) => x.id === id);
+  if (!a) return;
   const canvas = document.createElement('canvas');
-  JsBarcode(canvas, p.barcode, { format: 'CODE128', width: 2, height: 60, displayValue: true });
+  JsBarcode(canvas, a.barcode, { format: 'CODE128', width: 2, height: 60, displayValue: true });
   const dataUrl = canvas.toDataURL('image/png');
 
   const w = window.open('', '_blank', 'width=420,height=320');
   w.document.write(`
-    <html><head><title>Label - ${esc(p.barcode)}</title></head>
+    <html><head><title>Label - ${esc(a.barcode)}</title></head>
     <body style="font-family:sans-serif;text-align:center;padding:20px;">
-      <div style="font-weight:700;font-size:14px;margin-bottom:8px;">${esc(p.product_name)}</div>
+      <div style="font-weight:700;font-size:14px;margin-bottom:8px;">${esc(a.asset_name)}</div>
       <img src="${dataUrl}" alt="barcode">
-      <div style="font-size:11px;color:#555;margin-top:6px;">${esc(p.position || '')} ${p.allocated_user ? '• ' + esc(p.allocated_user) : ''}</div>
+      <div style="font-size:11px;color:#555;margin-top:6px;">${esc(a.location || '')} ${a.assigned_employee ? '&bull; ' + esc(a.assigned_employee) : ''}</div>
     </body></html>
   `);
   w.document.close();
@@ -650,13 +1055,19 @@ async function loadHistory() {
   body.innerHTML = '';
   data.scans.forEach((s) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${s.scan_date}</td><td>${s.scan_time}</td><td style="font-family:monospace">${esc(s.barcode)}</td><td>${esc(s.product_name)}</td><td>${esc(s.position || '-')}</td><td>${esc(s.allocated_user || '-')}</td><td>${esc(s.scanned_by)}</td><td>${esc(s.device_name)}</td><td>${esc(s.remarks || '-')}</td>`;
+    tr.innerHTML = `<td>${s.scan_date}</td><td>${s.scan_time}</td><td style="font-family:monospace">${esc(s.barcode)}</td><td>${esc(s.asset_name)}</td><td>${esc(s.location || '-')}</td><td>${esc(s.assigned_employee || '-')}</td><td>${esc(s.scanned_by)}</td><td>${esc(s.device_name)}</td><td>${esc(s.remarks || '-')}</td>`;
     body.appendChild(tr);
   });
   document.getElementById('historyEmpty').classList.toggle('hidden', data.scans.length > 0);
 }
 
-// ---------- USERS ----------
+// ---------- USERS (Super Admin) ----------
+function updateUserVerticalVisibility() {
+  const role = document.getElementById('newUserRole').value;
+  document.getElementById('newUserVertical').closest('div') || null;
+  document.getElementById('newUserVertical').style.display = role === 'super_admin' ? 'none' : '';
+}
+
 async function loadUsers() {
   const data = await api('/api/users');
   const body = document.getElementById('usersBody');
@@ -665,7 +1076,7 @@ async function loadUsers() {
   historySelect.innerHTML = '<option value="">All Users</option>';
   data.users.forEach((u) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${esc(u.username)}</td><td>${esc(u.full_name)}</td><td><span class="role-badge role-${u.role}">${u.role}</span></td><td>${new Date(u.created_at).toLocaleDateString()}</td><td><button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id})">Delete</button></td>`;
+    tr.innerHTML = `<td>${esc(u.username)}</td><td>${esc(u.full_name)}</td><td><span class="role-badge role-${u.role}">${u.role.replace('_',' ')}</span></td><td>${u.vertical_name ? (u.vertical_icon || '') + ' ' + esc(u.vertical_name) : '&mdash;'}</td><td>${new Date(u.created_at).toLocaleDateString()}</td><td><button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id})">Delete</button></td>`;
     body.appendChild(tr);
 
     const opt = document.createElement('option');
@@ -680,19 +1091,20 @@ async function addUser() {
   const full_name = document.getElementById('newUserFullName').value.trim();
   const password = document.getElementById('newUserPassword').value;
   const role = document.getElementById('newUserRole').value;
+  const vertical_id = document.getElementById('newUserVertical').value;
   if (!username || !password) { toast('Username and password required', false); return; }
+  if (role !== 'super_admin' && !vertical_id) { toast('Business vertical required for this role', false); return; }
   try {
     await api('/api/users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password, full_name, role })
+      body: JSON.stringify({ username, password, full_name, role, vertical_id: role === 'super_admin' ? null : Number(vertical_id) })
     });
     toast('User added');
     document.getElementById('newUserUsername').value = '';
     document.getElementById('newUserFullName').value = '';
     document.getElementById('newUserPassword').value = '';
     loadUsers();
-    loadDashboard();
   } catch (e) { toast(e.message, false); }
 }
 
@@ -702,7 +1114,31 @@ async function deleteUser(id) {
     await api(`/api/users/${id}`, { method: 'DELETE' });
     toast('User deleted');
     loadUsers();
-    loadDashboard();
+  } catch (e) { toast(e.message, false); }
+}
+
+// ---------- BUSINESSES (Super Admin) ----------
+async function loadBusinesses() {
+  const data = await api('/api/verticals');
+  const list = document.getElementById('businessesList');
+  list.innerHTML = data.verticals.map((v) => `
+    <div class="vertical-card"><div class="icon">${v.icon || '🏢'}</div><div><b>${esc(v.name)}</b><div style="font-size:11px;color:#6b7280;">${esc(v.code)}</div></div></div>
+  `).join('');
+}
+
+async function addBusiness() {
+  const name = document.getElementById('newBizName').value.trim();
+  const code = document.getElementById('newBizCode').value.trim();
+  const icon = document.getElementById('newBizIcon').value.trim();
+  if (!name || !code) { toast('Name and code are required', false); return; }
+  try {
+    await api('/api/verticals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, code, icon }) });
+    toast('Business added');
+    document.getElementById('newBizName').value = '';
+    document.getElementById('newBizCode').value = '';
+    document.getElementById('newBizIcon').value = '';
+    await loadVerticals();
+    loadBusinesses();
   } catch (e) { toast(e.message, false); }
 }
 
@@ -710,41 +1146,53 @@ async function deleteUser(id) {
 let lastGeneratedBarcode = '';
 
 function openCreateBarcodeModal() {
-  ['cbName', 'cbBrand', 'cbCategory', 'cbVariant', 'cbSerial', 'cbLocation'].forEach((id) => {
+  ['cbName','cbCategory','cbBrand','cbModel','cbSerial','cbPurchaseDate','cbWarrantyExpiry','cbLocation','cbDepartment','cbAssignedEmployee','cbRemarks'].forEach((id) => {
     document.getElementById(id).value = '';
   });
+  document.getElementById('cbQuantity').value = 1;
+  document.getElementById('cbVendor').value = '';
   document.getElementById('createBarcodeForm').classList.remove('hidden');
   document.getElementById('createBarcodeResult').classList.add('hidden');
   document.getElementById('createBarcodeOverlay').classList.remove('hidden');
 }
 function closeCreateBarcodeModal() {
   document.getElementById('createBarcodeOverlay').classList.add('hidden');
-  loadProducts();
+  loadAssets();
   loadDashboard();
 }
 
 async function generateBarcode() {
-  const product_name = document.getElementById('cbName').value.trim();
-  const brand_name = document.getElementById('cbBrand').value.trim();
-  const category = document.getElementById('cbCategory').value.trim();
-  const variant = document.getElementById('cbVariant').value.trim();
+  const asset_name = document.getElementById('cbName').value.trim();
   const serial_number = document.getElementById('cbSerial').value.trim();
-  const location = document.getElementById('cbLocation').value.trim();
-
-  if (!product_name || !brand_name || !category) {
-    toast('Product Name, Brand Name and Category are required', false);
+  if (!asset_name || !serial_number) {
+    toast('Asset Name and Serial Number are required', false);
     return;
   }
+  const vertical_id = requiredVerticalIdFor('cbVertical');
+  if (isSuperAdmin() && !vertical_id) { toast('Business Vertical is required', false); return; }
 
   try {
-    const data = await api('/api/products/generate-barcode', {
+    const data = await api('/api/assets/generate-barcode', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ product_name, brand_name, category, variant, serial_number, location })
+      body: JSON.stringify({
+        asset_name, serial_number, vertical_id,
+        category: document.getElementById('cbCategory').value,
+        vendor_id: document.getElementById('cbVendor').value || null,
+        brand: document.getElementById('cbBrand').value,
+        model: document.getElementById('cbModel').value,
+        quantity: Number(document.getElementById('cbQuantity').value) || 1,
+        purchase_date: document.getElementById('cbPurchaseDate').value || null,
+        warranty_expiry: document.getElementById('cbWarrantyExpiry').value || null,
+        location: document.getElementById('cbLocation').value,
+        department: document.getElementById('cbDepartment').value,
+        assigned_employee: document.getElementById('cbAssignedEmployee').value,
+        remarks: document.getElementById('cbRemarks').value
+      })
     });
-    lastGeneratedBarcode = data.product.barcode;
+    lastGeneratedBarcode = data.asset.barcode;
     JsBarcode('#cbCanvas', lastGeneratedBarcode, { format: 'CODE128', width: 2, height: 70, displayValue: true });
-    document.getElementById('cbValue').textContent = `Barcode: ${lastGeneratedBarcode} — ${product_name}`;
+    document.getElementById('cbValue').textContent = `Barcode: ${lastGeneratedBarcode} — ${asset_name}`;
     document.getElementById('createBarcodeForm').classList.add('hidden');
     document.getElementById('createBarcodeResult').classList.remove('hidden');
     toast('Barcode generated');
@@ -817,28 +1265,28 @@ async function runGlobalSearch() {
     return;
   }
 
-  const pBody = document.getElementById('searchProductsBody');
+  const pBody = document.getElementById('searchAssetsBody');
   pBody.innerHTML = '';
-  data.products.forEach((p) => {
+  data.assets.forEach((a) => {
     const tr = document.createElement('tr');
-    const img = p.image_path ? `<img class="thumb" src="${p.image_path}">` : `<div class="thumb-empty"></div>`;
-    tr.innerHTML = `<td>${img}</td><td style="font-family:monospace">${highlight(p.barcode, q)}</td><td>${highlight(p.product_name, q)}</td><td>${highlight(p.brand_name || '-', q)}</td><td>${highlight(p.category || '-', q)}</td><td>${highlight(p.position || '-', q)}</td><td>${highlight(p.allocated_user || '-', q)}</td><td><span class="scan-count-badge">${p.scan_count || 0}</span></td>`;
+    const img = a.image_path ? `<img class="thumb" src="${a.image_path}">` : `<div class="thumb-empty"></div>`;
+    tr.innerHTML = `<td>${img}</td><td style="font-family:monospace">${highlight(a.barcode, q)}</td><td>${highlight(a.asset_name, q)}</td><td>${a.vertical_icon || ''} ${highlight(a.vertical_name, q)}</td><td>${highlight(a.serial_number, q)}</td><td>${statusChip(a.status)}</td><td>${highlight(a.assigned_employee || '-', q)}</td>`;
     pBody.appendChild(tr);
   });
-  document.getElementById('searchProductsCount').textContent = data.products.length;
-  document.getElementById('searchProductsEmpty').classList.toggle('hidden', data.products.length > 0);
+  document.getElementById('searchAssetsCount').textContent = data.assets.length;
+  document.getElementById('searchAssetsEmpty').classList.toggle('hidden', data.assets.length > 0);
 
   const sBody = document.getElementById('searchScansBody');
   sBody.innerHTML = '';
   data.scans.forEach((s) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${highlight(s.scan_date, q)}</td><td>${highlight(s.scan_time, q)}</td><td style="font-family:monospace">${highlight(s.barcode, q)}</td><td>${highlight(s.product_name, q)}</td><td>${highlight(s.scanned_by, q)}</td><td>${highlight(s.device_name, q)}</td>`;
+    tr.innerHTML = `<td>${highlight(s.scan_date, q)}</td><td>${highlight(s.scan_time, q)}</td><td style="font-family:monospace">${highlight(s.barcode, q)}</td><td>${highlight(s.asset_name, q)}</td><td>${highlight(s.scanned_by, q)}</td><td>${highlight(s.device_name, q)}</td>`;
     sBody.appendChild(tr);
   });
   document.getElementById('searchScansCount').textContent = data.scans.length;
   document.getElementById('searchScansEmpty').classList.toggle('hidden', data.scans.length > 0);
 
-  const noResults = data.products.length === 0 && data.scans.length === 0;
+  const noResults = data.assets.length === 0 && data.scans.length === 0;
   document.getElementById('searchNoResults').classList.toggle('hidden', !noResults);
 }
 

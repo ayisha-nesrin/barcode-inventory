@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>AEC Inventory - Login</title>
+<title>AEC Group - Sign In</title>
 <link rel="manifest" href="/manifest.json">
 <meta name="theme-color" content="#1a56db">
 <style>
@@ -16,6 +16,11 @@
   html{-webkit-text-size-adjust:100%;}
   body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);margin:0;display:flex;min-height:100dvh;align-items:center;justify-content:center;padding:20px;padding-top:calc(20px + env(safe-area-inset-top));padding-bottom:calc(20px + env(safe-area-inset-bottom));}
   .card{background:#fff;border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.08);padding:28px 24px;width:100%;max-width:380px;max-height:calc(100dvh - 40px);overflow-y:auto;}
+  .back-link{display:inline-block;font-size:12px;color:#6b7280;text-decoration:none;margin-bottom:14px;}
+  .vertical-context{display:flex;align-items:center;gap:10px;background:#eef2ff;border-radius:10px;padding:10px 12px;margin-bottom:16px;}
+  .vertical-context .icon{font-size:26px;line-height:1;}
+  .vertical-context .name{font-weight:700;font-size:14px;color:#1e3a8a;}
+  .vertical-context .label{font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;}
   h1{font-size:19px;margin:0 0 4px;color:#111827;}
   p.sub{color:#6b7280;font-size:13px;margin:0 0 22px;}
   label{display:block;font-size:13px;color:#374151;margin:14px 0 6px;font-weight:600;}
@@ -25,7 +30,8 @@
   button:hover{background:#1543ad;}
   button:active{background:#123a94;}
   .err{color:#dc2626;font-size:13px;margin-top:12px;display:none;}
-  .hint{margin-top:18px;font-size:12px;color:#9ca3af;text-align:center;line-height:1.7;}
+  .hint{margin-top:18px;font-size:11px;color:#9ca3af;text-align:center;line-height:1.7;}
+  .hidden{display:none !important;}
 
   @media (min-width: 641px) {
     .card{padding:36px 32px;}
@@ -45,8 +51,16 @@
 </head>
 <body>
 <div class="card">
-  <h1>AEC Barcode Inventory</h1>
-  <p class="sub">Sign in to scan products or manage inventory</p>
+  <a class="back-link" href="/">&larr; AEC Group</a>
+  <div class="vertical-context hidden" id="verticalContext">
+    <div class="icon" id="vcIcon">🏢</div>
+    <div>
+      <div class="label">Signing in to</div>
+      <div class="name" id="vcName"></div>
+    </div>
+  </div>
+  <h1>AEC Group EAMS</h1>
+  <p class="sub">Sign in to scan assets or manage inventory</p>
   <form id="loginForm">
     <label>Username</label>
     <input type="text" id="username" autocomplete="username" required>
@@ -55,9 +69,25 @@
     <div class="err" id="err"></div>
     <button type="submit">Sign In</button>
   </form>
-  <div class="hint">Demo admin: <b>admin</b> / admin123<br>Demo scanner: <b>scanner1</b> / scanner123<br>(change these in the Users tab once logged in)</div>
+  <div class="hint">Demo Super Admin: <b>superadmin</b> / super123<br>Demo Vertical Admin: <b>studies.admin</b> / studies123<br>Demo Employee: <b>studies.emp</b> / emp123</div>
 </div>
 <script>
+async function showVerticalContext() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('vertical');
+  if (!code) return;
+  try {
+    const res = await fetch('/api/verticals');
+    const data = await res.json();
+    const v = (data.verticals || []).find((x) => x.code === code);
+    if (!v) return;
+    document.getElementById('vcIcon').textContent = v.icon || '🏢';
+    document.getElementById('vcName').textContent = v.name;
+    document.getElementById('verticalContext').classList.remove('hidden');
+  } catch (e) {}
+}
+showVerticalContext();
+
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const username = document.getElementById('username').value.trim();
@@ -76,7 +106,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
       errEl.style.display = 'block';
       return;
     }
-    window.location.href = data.user.role === 'admin' ? '/admin.html' : '/scan.html';
+    window.location.href = data.user.role === 'employee' ? '/scan.html' : '/admin.html';
   } catch (err) {
     errEl.textContent = 'Connection error';
     errEl.style.display = 'block';

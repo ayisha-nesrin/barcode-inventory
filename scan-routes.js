@@ -1,15 +1,9 @@
 const express = require('express');
 const multer = require('multer');
-const { query } = require('./db-init');
-const { requireLogin } = require('./auth-middleware');
+const { query, logAudit, getIST } = require('./db-init');
+const { requireLogin, scopeVerticalId } = require('./auth-middleware');
 const router = express.Router();
 
-// Photos are kept small and stored as base64 directly in the database (as a
-// data: URL) instead of on local disk. This is what makes photos survive
-// server restarts/redeploys on hosts with no persistent disk (e.g. Render
-// free tier) - the database (Neon) is the only thing that needs to persist.
-// Kept deliberately small (3MB) since base64 inflates size ~33% and the
-// free Neon tier has a limited total storage budget.
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 3 * 1024 * 1024 }
@@ -20,114 +14,131 @@ function fileToDataUrl(file) {
   return `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
 }
 
-// The server (e.g. Render) may run in UTC regardless of where your team is.
-// Always compute the displayed scan date/time in India Standard Time so the
-// records match what your staff actually see on their clocks.
-function getIST(date) {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Kolkata',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit',
-    hour12: false
-  }).formatToParts(date).reduce((acc, p) => { acc[p.type] = p.value; return acc; }, {});
-  return {
-    date: `${parts.year}-${parts.month}-${parts.day}`,
-    time: `${parts.hour}:${parts.minute}:${parts.second}`
-  };
-}
-
 router.use(requireLogin);
 
-// Record a scan.
+// Record a scan (camera barcode/QR or manual entry).
 //
-// IMPORTANT - one record per barcode, always:
-//   - First time a barcode is scanned  -> INSERT a new row into `products`
-//     (scan_count starts at 1).
-//   - Every later scan of that SAME barcode -> we look it up with
-//     `WHERE barcode = $1` above, find the existing row, and UPDATE it in
-//     place (scan_count = scan_count + 1, last_scanned_at = now()). We
-//     never INSERT a second products row for a barcode that already
-//     exists, so there is exactly one product record per unique barcode,
-//     no matter how many times it gets scanned.
-// A full history of every individual scan (who/when/what device) is kept
-// separately in the `scans` table below - that table is append-only by
-// design (it's your audit trail), while `products` always has just the one
-// current row per barcode.
+// Vertical isolation: an employee/vertical_admin can only ever create or
+// update an asset inside their OWN vertical (taken from req.session.user,
+// never from the client). A super_admin scanning must specify which
+// vertical the new asset belongs to.
+//
+// One record per barcode, always: first scan of a barcode INSERTs; every
+// later scan of that SAME barcode UPDATEs the one existing row and bumps
+// scan_count - see asset-routes.js and db-init.js for the same rule
+// applied elsewhere. Every individual scan event is still logged as a
+// separate row in `scans` (the audit trail), even though `assets` never
+// grows a duplicate row for a repeat scan.
 router.post('/', upload.single('photo'), async (req, res, next) => {
   try {
-    const { barcode, product_name, position, allocated_user, remarks, device_name, device_id } =
-      req.body || {};
+    const user = req.session.user;
+    const {
+      barcode, asset_name, serial_number, category, vendor_id, brand, model, quantity,
+      purchase_date, warranty_expiry, location, department, assigned_employee, remarks,
+      vertical_id: requestedVerticalId
+    } = req.body || {};
     if (!barcode) return res.status(400).json({ error: 'Barcode required' });
 
     const image_path = fileToDataUrl(req.file);
+    const myVertical = scopeVerticalId(req);
 
-    const { rows: existingRows } = await query('SELECT * FROM products WHERE barcode = $1', [barcode]);
-    let product = existingRows[0];
-    const isNewProduct = !product;
+    const { rows: existingRows } = await query(
+      'SELECT * FROM assets WHERE barcode = $1 AND deleted_at IS NULL',
+      [barcode]
+    );
+    let asset = existingRows[0];
 
-    if (isNewProduct) {
-      if (!product_name) {
-        return res.status(400).json({ error: 'Product name required for a new product' });
+    if (asset && myVertical !== null && asset.vertical_id !== myVertical) {
+      // Exists, but belongs to a different business vertical - never
+      // expose or update it from here.
+      return res.status(404).json({ error: 'Asset not found' });
+    }
+
+    const isNewAsset = !asset;
+
+    if (isNewAsset) {
+      if (!asset_name || !serial_number) {
+        return res.status(400).json({ error: 'Asset Name and Serial Number are required for a new asset' });
       }
+      let vertical_id = user.vertical_id;
+      if (user.role === 'super_admin') {
+        if (!requestedVerticalId) return res.status(400).json({ error: 'Business Vertical is required' });
+        vertical_id = Number(requestedVerticalId);
+      }
+
+      const { rows: dupSerial } = await query('SELECT id FROM assets WHERE serial_number = $1', [serial_number]);
+      if (dupSerial.length) {
+        return res.status(409).json({ error: 'This Serial Number is already registered to another asset' });
+      }
+
       const { rows } = await query(
-        `INSERT INTO products (barcode, product_name, image_path, position, allocated_user, remarks, scan_count, last_scanned_at)
-         VALUES ($1, $2, $3, $4, $5, $6, 1, now()) RETURNING *`,
-        [barcode, product_name, image_path || null, position || '', allocated_user || '', remarks || '']
+        `INSERT INTO assets (barcode, asset_name, vertical_id, category, vendor_id, brand, model, serial_number, quantity, purchase_date, warranty_expiry, location, department, assigned_employee, remarks, image_path, scan_count, last_scanned_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16, 1, now()) RETURNING *`,
+        [
+          barcode, asset_name, vertical_id, category || '', vendor_id || null, brand || '', model || '',
+          serial_number, quantity || 1, purchase_date || null, warranty_expiry || null,
+          location || '', department || '', assigned_employee || '', remarks || '', image_path || null
+        ]
       );
-      product = rows[0];
+      asset = rows[0];
+      await logAudit({ username: user.username, vertical_id, action: 'Asset Created', ip_address: req.ip, new_value: asset });
     } else {
-      // Same barcode as an existing product: update THAT row (no new
-      // record) and bump its scan_count instead of duplicating anything.
       const fields = [];
       const params = [];
       function set(col, val) {
         params.push(val);
         fields.push(`${col} = $${params.length}`);
       }
-      if (product_name) set('product_name', product_name);
-      if (position !== undefined) set('position', position);
-      if (allocated_user !== undefined) set('allocated_user', allocated_user);
+      if (location !== undefined) set('location', location);
+      if (department !== undefined) set('department', department);
+      if (assigned_employee !== undefined) set('assigned_employee', assigned_employee);
       if (image_path) set('image_path', image_path);
       fields.push('scan_count = scan_count + 1');
       fields.push('last_scanned_at = now()');
       fields.push('updated_at = now()');
 
-      params.push(product.id);
-      const { rows } = await query(
-        `UPDATE products SET ${fields.join(', ')} WHERE id = $${params.length} RETURNING *`,
-        params
-      );
-      product = rows[0];
+      params.push(asset.id);
+      const { rows } = await query(`UPDATE assets SET ${fields.join(', ')} WHERE id = $${params.length} RETURNING *`, params);
+      asset = rows[0];
     }
 
     const ist = getIST(new Date());
     const { rows: scanRows } = await query(
-      `INSERT INTO scans (product_id, barcode, product_name, scanned_by, device_name, device_id, scan_date, scan_time, position, allocated_user, remarks)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
+      `INSERT INTO scans (asset_id, vertical_id, barcode, asset_name, scanned_by, device_name, device_id, scan_date, scan_time, location, department, assigned_employee, remarks)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
       [
-        product.id, barcode, product.product_name,
-        req.session.user.username,
-        device_name || 'Unknown device',
-        device_id || 'unknown',
+        asset.id, asset.vertical_id, barcode, asset.asset_name,
+        user.username,
+        req.body.device_name || 'Unknown device',
+        req.body.device_id || 'unknown',
         ist.date, ist.time,
-        product.position, product.allocated_user,
+        asset.location, asset.department, asset.assigned_employee,
         remarks || ''
       ]
     );
+    await logAudit({ username: user.username, vertical_id: asset.vertical_id, action: 'Barcode Scanned', ip_address: req.ip, new_value: { barcode } });
 
-    res.status(201).json({ product, scan: scanRows[0], isNewProduct });
+    res.status(201).json({ asset, scan: scanRows[0], isNewAsset });
   } catch (err) {
     next(err);
   }
 });
 
-// Scan history with optional filters
+// Scan history with optional filters - scoped by vertical.
 router.get('/', async (req, res, next) => {
   try {
-    const { user, barcode, from, to } = req.query;
+    const myVertical = scopeVerticalId(req);
+    const { user, barcode, from, to, vertical_id } = req.query;
     const clauses = [];
     const params = [];
 
+    if (myVertical !== null) {
+      params.push(myVertical);
+      clauses.push(`vertical_id = $${params.length}`);
+    } else if (vertical_id) {
+      params.push(Number(vertical_id));
+      clauses.push(`vertical_id = $${params.length}`);
+    }
     if (user) {
       params.push(user);
       clauses.push(`scanned_by = $${params.length}`);

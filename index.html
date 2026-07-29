@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>AEC Group - Enterprise Asset Management</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#1a56db">
+<style>
+  /* Mobile-first landing page: cards stack in a single column on phones,
+     widen into a 2-3 column grid as the viewport grows. */
+  :root{--blue:#1a56db;--bg:#0f1b3d;--bg2:#16234f;}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html{-webkit-text-size-adjust:100%;}
+  body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:0;min-height:100dvh;background:linear-gradient(160deg,var(--bg),var(--bg2));color:#fff;}
+  header{padding:28px 20px 8px;padding-top:calc(28px + env(safe-area-inset-top));text-align:center;}
+  header .brand{font-size:13px;letter-spacing:.12em;color:#93a4d6;font-weight:700;text-transform:uppercase;}
+  header h1{font-size:24px;margin:8px 0 6px;}
+  header p{color:#b7c2e6;font-size:13px;margin:0;line-height:1.6;}
+
+  main{max-width:960px;margin:0 auto;padding:22px 16px calc(40px + env(safe-area-inset-bottom));}
+  .cards{display:grid;grid-template-columns:1fr;gap:16px;}
+  .card{background:#fff;border-radius:16px;padding:26px 20px;text-align:center;text-decoration:none;color:#111827;box-shadow:0 10px 30px rgba(0,0,0,.25);transition:transform .15s ease;min-height:150px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;touch-action:manipulation;}
+  .card:active{transform:scale(.97);}
+  .card .icon{font-size:44px;line-height:1;}
+  .card .name{font-size:17px;font-weight:800;color:#111827;}
+  .card .sub{font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.06em;}
+
+  .login-link{display:block;text-align:center;margin-top:26px;color:#b7c2e6;font-size:13px;}
+  .login-link a{color:#fff;font-weight:700;text-decoration:none;}
+
+  .empty{text-align:center;color:#b7c2e6;padding:40px 16px;font-size:13px;}
+
+  @media (min-width: 641px) {
+    header{padding-top:44px;}
+    header h1{font-size:30px;}
+    main{padding:30px 24px 60px;}
+    .cards{grid-template-columns:repeat(2, 1fr);gap:20px;}
+    .card{padding:34px 24px;min-height:180px;}
+    .card .icon{font-size:56px;}
+    .card .name{font-size:19px;}
+  }
+  @media (min-width: 1000px) {
+    .cards{grid-template-columns:repeat(3, 1fr);}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">AEC Group</div>
+  <h1>Enterprise Asset Management</h1>
+  <p>Select your business to sign in and manage its assets.</p>
+</header>
+
+<main>
+  <div class="cards" id="cards"></div>
+  <div class="empty hidden" id="empty">No business verticals are set up yet.</div>
+  <div class="login-link">Already know your login? <a href="/login.html">Sign in directly &rarr;</a></div>
+</main>
+
+<script>
+async function loadVerticals() {
+  try {
+    const res = await fetch('/api/verticals');
+    const data = await res.json();
+    const container = document.getElementById('cards');
+    if (!data.verticals || !data.verticals.length) {
+      document.getElementById('empty').classList.remove('hidden');
+      return;
+    }
+    container.innerHTML = data.verticals.map((v) => `
+      <a class="card" href="/login.html?vertical=${encodeURIComponent(v.code)}">
+        <div class="icon">${v.logo_path ? `<img src="${v.logo_path}" alt="${escHtml(v.name)}" style="width:56px;height:56px;object-fit:contain;">` : escHtml(v.icon || '🏢')}</div>
+        <div class="name">${escHtml(v.name)}</div>
+        <div class="sub">Sign in &rarr;</div>
+      </a>
+    `).join('');
+  } catch (e) {
+    document.getElementById('empty').classList.remove('hidden');
+  }
+}
+function escHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str == null ? '' : String(str);
+  return div.innerHTML;
+}
+loadVerticals();
+</script>
+</body>
+</html>

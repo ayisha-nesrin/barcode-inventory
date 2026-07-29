@@ -2,33 +2,90 @@ const express = require('express');
 const ExcelJS = require('exceljs');
 const PDFDocument = require('pdfkit');
 const { query } = require('./db-init');
-const { requireLogin } = require('./auth-middleware');
+const { requireLogin, scopeVerticalId } = require('./auth-middleware');
 const router = express.Router();
 
 router.use(requireLogin);
 
-router.get('/products.xlsx', async (req, res, next) => {
+async function fetchAssets(req) {
+  const myVertical = scopeVerticalId(req);
+  const params = [];
+  let where = 'WHERE a.deleted_at IS NULL';
+  if (myVertical !== null) {
+    params.push(myVertical);
+    where += ` AND a.vertical_id = $${params.length}`;
+  }
+  const { rows } = await query(
+    `SELECT a.*, v.name AS vendor_name, ve.name AS vertical_name
+     FROM assets a LEFT JOIN vendors v ON a.vendor_id = v.id JOIN verticals ve ON a.vertical_id = ve.id
+     ${where} ORDER BY a.id ASC`,
+    params
+  );
+  return rows;
+}
+
+async function fetchScans(req) {
+  const myVertical = scopeVerticalId(req);
+  const params = [];
+  let where = '';
+  if (myVertical !== null) {
+    params.push(myVertical);
+    where = `WHERE vertical_id = $${params.length}`;
+  }
+  const { rows } = await query(`SELECT * FROM scans ${where} ORDER BY id ASC`, params);
+  return rows;
+}
+
+function csvEscape(val) {
+  const s = val == null ? '' : String(val);
+  if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+function toCSV(headers, keys, rows) {
+  const lines = [headers.map(csvEscape).join(',')];
+  rows.forEach((row) => lines.push(keys.map((k) => csvEscape(row[k])).join(',')));
+  return lines.join('\n');
+}
+
+const ASSET_COLUMNS = [
+  { header: 'Barcode', key: 'barcode', width: 18 },
+  { header: 'Asset Name', key: 'asset_name', width: 28 },
+  { header: 'Business', key: 'vertical_name', width: 16 },
+  { header: 'Category', key: 'category', width: 16 },
+  { header: 'Vendor', key: 'vendor_name', width: 14 },
+  { header: 'Brand', key: 'brand', width: 12 },
+  { header: 'Model', key: 'model', width: 14 },
+  { header: 'Serial Number', key: 'serial_number', width: 18 },
+  { header: 'Quantity', key: 'quantity', width: 10 },
+  { header: 'Location', key: 'location', width: 16 },
+  { header: 'Department', key: 'department', width: 16 },
+  { header: 'Assigned Employee', key: 'assigned_employee', width: 18 },
+  { header: 'Status', key: 'status', width: 12 },
+  { header: 'Warranty Expiry', key: 'warranty_expiry', width: 16 },
+  { header: 'Remarks', key: 'remarks', width: 22 }
+];
+const SCAN_COLUMNS = [
+  { header: 'Date', key: 'scan_date', width: 14 },
+  { header: 'Time', key: 'scan_time', width: 12 },
+  { header: 'Barcode', key: 'barcode', width: 18 },
+  { header: 'Asset Name', key: 'asset_name', width: 28 },
+  { header: 'Location', key: 'location', width: 16 },
+  { header: 'Assigned Employee', key: 'assigned_employee', width: 18 },
+  { header: 'Scanned By', key: 'scanned_by', width: 14 },
+  { header: 'Device', key: 'device_name', width: 22 },
+  { header: 'Remarks', key: 'remarks', width: 22 }
+];
+
+router.get('/assets.xlsx', async (req, res, next) => {
   try {
-    const { rows } = await query('SELECT * FROM products ORDER BY id ASC');
+    const rows = await fetchAssets(req);
     const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet('Products');
-    sheet.columns = [
-      { header: 'Barcode', key: 'barcode', width: 20 },
-      { header: 'Product Name', key: 'product_name', width: 32 },
-      { header: 'Position', key: 'position', width: 20 },
-      { header: 'Allocated User', key: 'allocated_user', width: 20 },
-      { header: 'Remarks', key: 'remarks', width: 25 },
-      { header: 'Created', key: 'created_at', width: 22 },
-      { header: 'Last Updated', key: 'updated_at', width: 22 }
-    ];
+    const sheet = workbook.addWorksheet('Assets');
+    sheet.columns = ASSET_COLUMNS;
     sheet.getRow(1).font = { bold: true };
     rows.forEach((p) => sheet.addRow(p));
-
-    res.setHeader(
-      'Content-Type',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    );
-    res.setHeader('Content-Disposition', 'attachment; filename="products.xlsx"');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="assets.xlsx"');
     await workbook.xlsx.write(res);
     res.end();
   } catch (err) {
@@ -36,32 +93,42 @@ router.get('/products.xlsx', async (req, res, next) => {
   }
 });
 
+router.get('/assets.csv', async (req, res, next) => {
+  try {
+    const rows = await fetchAssets(req);
+    const csv = toCSV(ASSET_COLUMNS.map((c) => c.header), ASSET_COLUMNS.map((c) => c.key), rows);
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="assets.csv"');
+    res.send(csv);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/scans.xlsx', async (req, res, next) => {
   try {
-    const { rows } = await query('SELECT * FROM scans ORDER BY id ASC');
+    const rows = await fetchScans(req);
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Scan History');
-    sheet.columns = [
-      { header: 'Date', key: 'scan_date', width: 14 },
-      { header: 'Time', key: 'scan_time', width: 12 },
-      { header: 'Barcode', key: 'barcode', width: 20 },
-      { header: 'Product Name', key: 'product_name', width: 32 },
-      { header: 'Position', key: 'position', width: 20 },
-      { header: 'Allocated User', key: 'allocated_user', width: 20 },
-      { header: 'Scanned By', key: 'scanned_by', width: 16 },
-      { header: 'Device', key: 'device_name', width: 24 },
-      { header: 'Remarks', key: 'remarks', width: 25 }
-    ];
+    sheet.columns = SCAN_COLUMNS;
     sheet.getRow(1).font = { bold: true };
     rows.forEach((s) => sheet.addRow(s));
-
-    res.setHeader(
-      'Content-Type',
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    );
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename="scan-history.xlsx"');
     await workbook.xlsx.write(res);
     res.end();
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/scans.csv', async (req, res, next) => {
+  try {
+    const rows = await fetchScans(req);
+    const csv = toCSV(SCAN_COLUMNS.map((c) => c.header), SCAN_COLUMNS.map((c) => c.key), rows);
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="scan-history.csv"');
+    res.send(csv);
   } catch (err) {
     next(err);
   }
@@ -89,24 +156,24 @@ function drawTable(doc, title, headers, colX, colW, rows, rowMapper) {
   });
 }
 
-router.get('/products.pdf', async (req, res, next) => {
+router.get('/assets.pdf', async (req, res, next) => {
   try {
-    const { rows } = await query('SELECT * FROM products ORDER BY id ASC');
+    const rows = await fetchAssets(req);
     const doc = new PDFDocument({ margin: 30, size: 'A4', layout: 'landscape' });
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'attachment; filename="products.pdf"');
+    res.setHeader('Content-Disposition', 'attachment; filename="assets.pdf"');
     doc.pipe(res);
 
-    const colX = [30, 150, 340, 460, 580, 700];
-    const colW = [115, 185, 115, 115, 115, 100];
+    const colX = [30, 130, 300, 400, 490, 590, 690];
+    const colW = [95, 165, 95, 85, 95, 95, 100];
     drawTable(
       doc,
-      'AEC Product Inventory Report',
-      ['Barcode', 'Product Name', 'Position', 'Allocated User', 'Remarks', 'Updated'],
+      'AEC Group - Asset Register',
+      ['Barcode', 'Asset Name', 'Business', 'Serial No.', 'Status', 'Employee', 'Updated'],
       colX,
       colW,
       rows,
-      (p) => [p.barcode, p.product_name, p.position, p.allocated_user, p.remarks, new Date(p.updated_at).toLocaleString()]
+      (a) => [a.barcode, a.asset_name, a.vertical_name, a.serial_number, a.status, a.assigned_employee, new Date(a.updated_at).toLocaleString()]
     );
 
     doc.end();
@@ -117,7 +184,7 @@ router.get('/products.pdf', async (req, res, next) => {
 
 router.get('/scans.pdf', async (req, res, next) => {
   try {
-    const { rows } = await query('SELECT * FROM scans ORDER BY id ASC');
+    const rows = await fetchScans(req);
     const doc = new PDFDocument({ margin: 30, size: 'A4', layout: 'landscape' });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'attachment; filename="scan-history.pdf"');
@@ -127,12 +194,12 @@ router.get('/scans.pdf', async (req, res, next) => {
     const colW = [65, 95, 195, 115, 125, 115];
     drawTable(
       doc,
-      'AEC Scan History Report',
-      ['Date/Time', 'Barcode', 'Product Name', 'Scanned By', 'Device', 'Position'],
+      'AEC Group - Scan History Report',
+      ['Date/Time', 'Barcode', 'Asset Name', 'Scanned By', 'Device', 'Location'],
       colX,
       colW,
       rows,
-      (s) => [`${s.scan_date} ${s.scan_time}`, s.barcode, s.product_name, s.scanned_by, s.device_name, s.position]
+      (s) => [`${s.scan_date} ${s.scan_time}`, s.barcode, s.asset_name, s.scanned_by, s.device_name, s.location]
     );
 
     doc.end();

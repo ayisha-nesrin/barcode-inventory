@@ -1,7 +1,12 @@
 // db-init.js
-// Persistent database backed by PostgreSQL (works with Neon's free tier,
-// or any Postgres connection string). Replaces the old local-JSON-file
-// storage so data survives server restarts and redeploys.
+// AEC Group Enterprise Asset Management System (EAMS) - Phase 1
+//
+// Persistent database backed by PostgreSQL (Neon free tier, or any Postgres
+// connection string). Multi-tenant schema: every asset and every scan
+// belongs to exactly one business "vertical" (AEC Studies, AEC Residency,
+// AEC Pixcel, and any future ones added later through the app itself -
+// verticals are DATA, not hardcoded, so adding a new AEC company never
+// requires a code change).
 //
 // Set the connection string via the DATABASE_URL environment variable.
 // Neon's connection strings need SSL, which is handled below automatically.
@@ -38,7 +43,52 @@ function getIST(date) {
   };
 }
 
+// Every mutating action across the app should call this. audit_logs is
+// write-only from the app's point of view - there is no UPDATE or DELETE
+// route anywhere against this table, which is what makes the log
+// "immutable" in practice (nobody, including Super Admin, has a code path
+// that can alter or erase a row once it's written).
+async function logAudit({ username, vertical_id, action, ip_address, old_value, new_value }) {
+  try {
+    await query(
+      `INSERT INTO audit_logs (username, vertical_id, action, ip_address, old_value, new_value)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        username || null,
+        vertical_id || null,
+        action,
+        ip_address || null,
+        old_value !== undefined ? JSON.stringify(old_value) : null,
+        new_value !== undefined ? JSON.stringify(new_value) : null
+      ]
+    );
+  } catch (err) {
+    // Audit logging must never break the actual request it's attached to.
+    console.error('Audit log write failed:', err.message);
+  }
+}
+
 async function initDB() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS verticals (
+      id SERIAL PRIMARY KEY,
+      code TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      icon TEXT DEFAULT '',
+      logo_path TEXT,
+      active BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS vendors (
+      id SERIAL PRIMARY KEY,
+      name TEXT UNIQUE NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
+
   await query(`
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
@@ -46,54 +96,95 @@ async function initDB() {
       password_hash TEXT NOT NULL,
       full_name TEXT,
       role TEXT NOT NULL,
+      vertical_id INTEGER REFERENCES verticals(id),
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `);
+  // Migration path for anyone upgrading from the old admin/scanner build.
+  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS vertical_id INTEGER REFERENCES verticals(id)`);
 
   await query(`
-    CREATE TABLE IF NOT EXISTS products (
+    CREATE TABLE IF NOT EXISTS assets (
       id SERIAL PRIMARY KEY,
       barcode TEXT UNIQUE NOT NULL,
-      product_name TEXT NOT NULL,
-      image_path TEXT,
-      position TEXT DEFAULT '',
-      allocated_user TEXT DEFAULT '',
+      asset_name TEXT NOT NULL,
+      vertical_id INTEGER NOT NULL REFERENCES verticals(id),
+      category TEXT DEFAULT '',
+      vendor_id INTEGER REFERENCES vendors(id),
+      brand TEXT DEFAULT '',
+      model TEXT DEFAULT '',
+      serial_number TEXT UNIQUE NOT NULL,
+      quantity INTEGER NOT NULL DEFAULT 1,
+      purchase_date DATE,
+      warranty_expiry DATE,
+      location TEXT DEFAULT '',
+      department TEXT DEFAULT '',
+      assigned_employee TEXT DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'Available',
       remarks TEXT DEFAULT '',
+      image_path TEXT,
+      scan_count INTEGER NOT NULL DEFAULT 0,
+      last_scanned_at TIMESTAMPTZ,
+      deleted_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `);
 
-  // Migration: add barcode-generator fields to a products table that may
-  // already exist from before this feature (safe/no-op if already present).
-  await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS brand_name TEXT DEFAULT ''`);
-  await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS category TEXT DEFAULT ''`);
-  await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS variant TEXT DEFAULT ''`);
-  await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS serial_number TEXT DEFAULT ''`);
+  await query(`
+    CREATE TABLE IF NOT EXISTS asset_assignments (
+      id SERIAL PRIMARY KEY,
+      asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+      employee_name TEXT NOT NULL,
+      department TEXT DEFAULT '',
+      assigned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      returned_at TIMESTAMPTZ,
+      assigned_by TEXT
+    )
+  `);
 
-  // Migration: track how many times each unique product has been scanned,
-  // instead of ever creating a second record for the same barcode. Every
-  // scan of an existing barcode increments this counter and updates
-  // last_scanned_at on the ONE existing row (see scan-routes.js) - the
-  // scans table below still keeps a full history row per scan.
-  await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS scan_count INTEGER NOT NULL DEFAULT 0`);
-  await query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS last_scanned_at TIMESTAMPTZ`);
+  await query(`
+    CREATE TABLE IF NOT EXISTS quantity_movements (
+      id SERIAL PRIMARY KEY,
+      asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+      change_amount INTEGER NOT NULL,
+      new_quantity INTEGER NOT NULL,
+      reason TEXT DEFAULT '',
+      changed_by TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
 
   await query(`
     CREATE TABLE IF NOT EXISTS scans (
       id SERIAL PRIMARY KEY,
-      product_id INTEGER REFERENCES products(id) ON DELETE SET NULL,
+      asset_id INTEGER REFERENCES assets(id) ON DELETE SET NULL,
+      vertical_id INTEGER REFERENCES verticals(id),
       barcode TEXT NOT NULL,
-      product_name TEXT,
+      asset_name TEXT,
       scanned_by TEXT,
       device_name TEXT,
       device_id TEXT,
       scan_date TEXT,
       scan_time TEXT,
-      position TEXT,
-      allocated_user TEXT,
+      location TEXT,
+      department TEXT,
+      assigned_employee TEXT,
       remarks TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
+
+  await query(`
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id SERIAL PRIMARY KEY,
+      ts TIMESTAMPTZ NOT NULL DEFAULT now(),
+      username TEXT,
+      vertical_id INTEGER,
+      action TEXT NOT NULL,
+      ip_address TEXT,
+      old_value TEXT,
+      new_value TEXT
     )
   `);
 
@@ -101,55 +192,93 @@ async function initDB() {
 }
 
 async function seed() {
-  const { rows: userRows } = await query('SELECT COUNT(*)::int AS count FROM users');
-  if (userRows[0].count === 0) {
+  const { rows: vertRows } = await query('SELECT COUNT(*)::int AS count FROM verticals');
+  let verticals;
+  if (vertRows[0].count === 0) {
+    const { rows } = await query(
+      `INSERT INTO verticals (code, name, icon) VALUES
+        ('aec-studies', 'AEC Studies', '🟦'),
+        ('aec-residency', 'AEC Residency', '🏨'),
+        ('aec-pixcel', 'AEC Pixcel', '🎬')
+       RETURNING *`
+    );
+    verticals = rows;
+  } else {
+    const { rows } = await query('SELECT * FROM verticals ORDER BY id ASC');
+    verticals = rows;
+  }
+  const byCode = Object.fromEntries(verticals.map((v) => [v.code, v]));
+
+  const { rows: vendorRows } = await query('SELECT COUNT(*)::int AS count FROM vendors');
+  if (vendorRows[0].count === 0) {
     await query(
-      `INSERT INTO users (username, password_hash, full_name, role) VALUES
-        ($1, $2, $3, $4),
-        ($5, $6, $7, $8)`,
-      [
-        'admin', bcrypt.hashSync('admin123', 10), 'System Administrator', 'admin',
-        'scanner1', bcrypt.hashSync('scanner123', 10), 'Michael (Warehouse Scanner)', 'scanner'
-      ]
+      `INSERT INTO vendors (name) VALUES ('Dell'), ('HP'), ('Lenovo'), ('Apple'), ('Canon'), ('Samsung')`
     );
   }
+  const { rows: vendors } = await query('SELECT * FROM vendors');
+  const vendorByName = Object.fromEntries(vendors.map((v) => [v.name, v]));
 
-  const { rows: productRows } = await query('SELECT COUNT(*)::int AS count FROM products');
-  if (productRows[0].count === 0) {
-    const sampleProducts = [
-      ['8901234567890', 'Dell Latitude 5420 Laptop', 'Rack A-12', 'John Smith', 'IT Department asset'],
-      ['8901234567891', 'HP LaserJet Printer M404', 'Rack B-04', 'Sarah Lee', ''],
-      ['8901234567892', 'Logitech Wireless Mouse MX Master 3', 'Shelf C-01', 'Unassigned', 'Spare stock'],
-      ['8901234567893', 'Cisco 24-Port Network Switch', 'Server Room - Rack 2', 'Network Team', ''],
-      ['8901234567894', 'Office Chair - Ergonomic', 'Store Room D', 'Unassigned', 'New stock, unassigned']
+  const { rows: userRows } = await query('SELECT COUNT(*)::int AS count FROM users');
+  if (userRows[0].count === 0) {
+    const u = (username, password, full_name, role, vertical_id) => [
+      username, bcrypt.hashSync(password, 10), full_name, role, vertical_id
+    ];
+    const demoUsers = [
+      u('superadmin', 'super123', 'AEC Group Super Admin', 'super_admin', null),
+      u('studies.admin', 'studies123', 'AEC Studies - Vertical Admin', 'vertical_admin', byCode['aec-studies'].id),
+      u('studies.emp', 'emp123', 'AEC Studies - Employee', 'employee', byCode['aec-studies'].id),
+      u('residency.admin', 'residency123', 'AEC Residency - Vertical Admin', 'vertical_admin', byCode['aec-residency'].id),
+      u('residency.emp', 'emp123', 'AEC Residency - Employee', 'employee', byCode['aec-residency'].id),
+      u('pixcel.admin', 'pixcel123', 'AEC Pixcel - Vertical Admin', 'vertical_admin', byCode['aec-pixcel'].id),
+      u('pixcel.emp', 'emp123', 'AEC Pixcel - Employee', 'employee', byCode['aec-pixcel'].id)
+    ];
+    for (const row of demoUsers) {
+      await query(
+        `INSERT INTO users (username, password_hash, full_name, role, vertical_id) VALUES ($1,$2,$3,$4,$5)`,
+        row
+      );
+    }
+  }
+
+  const { rows: assetRows } = await query('SELECT COUNT(*)::int AS count FROM assets');
+  if (assetRows[0].count === 0) {
+    const sampleAssets = [
+      // barcode, asset_name, vertical code, category, vendor, brand, model, serial, qty, location, department, assigned_employee, status
+      ['AEC1000001', 'Dell Latitude 5420 Laptop', 'aec-residency', 'Electronics', 'Dell', 'Dell', 'Latitude 5420', 'DL9837282', 1, 'Front Office', 'Administration', 'John Smith', 'Assigned'],
+      ['AEC1000002', 'Bath Soap (Guest Amenity)', 'aec-residency', 'Consumable', '', '', '', 'RESI-SOAP-001', 250, 'Housekeeping Store', 'Housekeeping', '', 'Available'],
+      ['AEC1000003', 'Epson Projector EB-X06', 'aec-studies', 'Electronics', 'Canon', 'Epson', 'EB-X06', 'ST-PROJ-9001', 1, 'Lecture Hall 1', 'Academics', '', 'Available'],
+      ['AEC1000004', 'Canon EOS R6 Camera', 'aec-pixcel', 'Electronics', 'Canon', 'Canon', 'EOS R6', 'PX-CAM-4471', 1, 'Studio A', 'Production', 'Michael Rao', 'Assigned'],
+      ['AEC1000005', 'Samsung 55" Studio Monitor', 'aec-pixcel', 'Electronics', 'Samsung', 'Samsung', 'QM55R', 'PX-MON-2210', 3, 'Studio B', 'Production', '', 'Available']
     ];
 
-    for (const [barcode, product_name, position, allocated_user, remarks] of sampleProducts) {
+    for (const row of sampleAssets) {
+      const [barcode, asset_name, vcode, category, vendorName, brand, model, serial_number, quantity, location, department, assigned_employee, status] = row;
+      const vertical_id = byCode[vcode].id;
+      const vendor_id = vendorName && vendorByName[vendorName] ? vendorByName[vendorName].id : null;
       const { rows } = await query(
-        `INSERT INTO products (barcode, product_name, position, allocated_user, remarks)
-         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-        [barcode, product_name, position, allocated_user, remarks]
+        `INSERT INTO assets (barcode, asset_name, vertical_id, category, vendor_id, brand, model, serial_number, quantity, location, department, assigned_employee, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
+        [barcode, asset_name, vertical_id, category, vendor_id, brand, model, serial_number, quantity, location, department, assigned_employee, status]
       );
-      // Seed one demo scan for the first 4 sample products
-      if (['8901234567890', '8901234567891', '8901234567892', '8901234567893'].includes(barcode)) {
-        const idx = sampleProducts.findIndex((p) => p[0] === barcode);
-        const ist = getIST(new Date());
+      const assetId = rows[0].id;
+
+      if (status === 'Assigned' && assigned_employee) {
         await query(
-          `INSERT INTO scans (product_id, barcode, product_name, scanned_by, device_name, device_id, scan_date, scan_time, position, allocated_user, remarks)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-          [
-            rows[0].id, barcode, product_name,
-            idx % 2 === 0 ? 'admin' : 'scanner1',
-            idx % 2 === 0 ? 'Samsung Galaxy S24 (Chrome)' : 'iPhone 15 (Safari)',
-            'demo-device-' + (idx % 2 === 0 ? '1' : '2'),
-            ist.date, ist.time,
-            position, allocated_user, 'Initial scan (demo data)'
-          ]
+          `INSERT INTO asset_assignments (asset_id, employee_name, department, assigned_by) VALUES ($1,$2,$3,$4)`,
+          [assetId, assigned_employee, department, 'superadmin']
         );
-        await query('UPDATE products SET scan_count = 1, last_scanned_at = now() WHERE id = $1', [rows[0].id]);
       }
+
+      const ist = getIST(new Date());
+      const scannedBy = vcode === 'aec-residency' ? 'residency.emp' : vcode === 'aec-studies' ? 'studies.emp' : 'pixcel.emp';
+      await query(
+        `INSERT INTO scans (asset_id, vertical_id, barcode, asset_name, scanned_by, device_name, device_id, scan_date, scan_time, location, department, assigned_employee, remarks)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+        [assetId, vertical_id, barcode, asset_name, scannedBy, 'Demo Device (Seed)', 'demo-device-seed', ist.date, ist.time, location, department, assigned_employee, 'Initial scan (demo data)']
+      );
+      await query('UPDATE assets SET scan_count = 1, last_scanned_at = now() WHERE id = $1', [assetId]);
     }
   }
 }
 
-module.exports = { pool, query, initDB };
+module.exports = { pool, query, initDB, logAudit, getIST };

@@ -1,6 +1,6 @@
 // Load DATABASE_URL / SESSION_SECRET from a local .env file if one exists
 // (used only when running on your own computer - Render and other hosts
-// provide these as real environment variables instead, so this is a no-oP
+// provide these as real environment variables instead, so this is a no-op
 // there).
 require('dotenv').config();
 
@@ -11,32 +11,41 @@ const session = require('express-session');
 const { initDB } = require('./db-init');
 
 const authRoutes = require('./auth-routes');
-const productRoutes = require('./product-routes');
+const assetRoutes = require('./asset-routes');
 const scanRoutes = require('./scan-routes');
 const userRoutes = require('./user-routes');
 const statsRoutes = require('./stats-routes');
 const exportRoutes = require('./export-routes');
 const searchRoutes = require('./search-routes');
+const verticalRoutes = require('./vertical-routes');
+const vendorRoutes = require('./vendor-routes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Render (and most hosts) put the app behind a reverse proxy. Without this,
+// req.ip would always resolve to the proxy's internal address instead of
+// the real visitor IP, which the audit log records for every action.
+app.set('trust proxy', 1);
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(
   session({
-    secret: process.env.SESSION_SECRET || 'aec-barcode-inventory-secret-change-me',
+    secret: process.env.SESSION_SECRET || 'aec-eams-secret-change-me',
     resave: false,
     saveUninitialized: false,
-    cookie: { maxAge: 1000 * 60 * 60 * 12 } // 12 hours
+    rolling: true, // idle timeout: each request refreshes the countdown
+    cookie: { maxAge: 1000 * 60 * 60 * 2 } // 2 hour idle session timeout
   })
 );
 
 // Front-end pages/assets are whitelisted explicitly (rather than a blanket
-// static folder) so the source code is never served. Product photos are no
-// longer served from local disk - they live as data URLs inside the
-// database (see scan-routes.js), so there's no /uploads route anymore.
+// static folder) so the source code is never served. Asset photos are
+// stored as data URLs inside the database (see scan-routes.js), so there's
+// no /uploads route.
 const publicFiles = {
+  '/index.html': 'index.html',
   '/login.html': 'login.html',
   '/scan.html': 'scan.html',
   '/admin.html': 'admin.html',
@@ -45,9 +54,15 @@ const publicFiles = {
   '/icon.svg': 'icon.svg'
 };
 
+// "/" is the AEC Group portal: if you're already logged in it sends you
+// straight to your dashboard, otherwise it shows the landing page with the
+// business-vertical cards.
 app.get('/', (req, res) => {
-  if (!req.session.user) return res.redirect('/login.html');
-  return res.redirect(req.session.user.role === 'admin' ? '/admin.html' : '/scan.html');
+  if (req.session.user) {
+    const role = req.session.user.role;
+    return res.redirect(role === 'employee' ? '/scan.html' : '/admin.html');
+  }
+  return res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 Object.entries(publicFiles).forEach(([route, file]) => {
@@ -56,12 +71,14 @@ Object.entries(publicFiles).forEach(([route, file]) => {
 
 // API routes
 app.use('/api/auth', authRoutes);
-app.use('/api/products', productRoutes);
+app.use('/api/assets', assetRoutes);
 app.use('/api/scans', scanRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/export', exportRoutes);
 app.use('/api/search', searchRoutes);
+app.use('/api/verticals', verticalRoutes);
+app.use('/api/vendors', vendorRoutes);
 
 // Error handler
 app.use((err, req, res, next) => {
@@ -74,7 +91,7 @@ initDB()
     app.listen(PORT, '0.0.0.0', () => {
       console.log('');
       console.log('=================================================');
-      console.log('  AEC Barcode Inventory System is running');
+      console.log('  AEC Group Enterprise Asset Management System');
       console.log('=================================================');
       console.log(`  On this computer:  http://localhost:${PORT}`);
       console.log(`  On your phone:     http://<this-computer-IP>:${PORT}`);
