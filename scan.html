@@ -189,6 +189,7 @@ let currentUser = null;
 let html5QrCode = null;
 let scanning = false;
 let currentBarcode = null;
+let csrfToken = null;
 
 function toast(msg, ok = true) {
   const t = document.getElementById('toast');
@@ -224,6 +225,11 @@ function getDeviceName() {
 }
 
 async function api(url, opts) {
+  opts = opts || {};
+  const method = (opts.method || 'GET').toUpperCase();
+  if (method !== 'GET' && csrfToken) {
+    opts.headers = Object.assign({}, opts.headers, { 'X-CSRF-Token': csrfToken });
+  }
   const res = await fetch(url, opts);
   let data = {};
   try { data = await res.json(); } catch (e) {}
@@ -240,10 +246,14 @@ async function init() {
     return;
   }
   currentUser = me.user;
+  csrfToken = me.csrfToken || null;
   document.getElementById('userinfo').textContent = `${currentUser.full_name} (${currentUser.role.replace('_',' ')})`;
   const scopeBadge = document.getElementById('scopeBadge');
   if (currentUser.vertical) {
-    scopeBadge.textContent = `${currentUser.vertical.icon || '🏢'} ${currentUser.vertical.name}`;
+    const v = currentUser.vertical;
+    scopeBadge.innerHTML = v.logo_path
+      ? `<img src="${v.logo_path}" alt="${esc(v.name)}" style="width:16px;height:16px;object-fit:contain;vertical-align:-3px;margin-right:2px;">${esc(v.name)}`
+      : `${v.icon || '🏢'} ${esc(v.name)}`;
   }
   if (currentUser.role !== 'employee') document.getElementById('adminLink').classList.remove('hidden');
   document.getElementById('deviceInfo').textContent = `Device: ${getDeviceName()}`;
@@ -416,7 +426,11 @@ async function submitScan(formFields, photoInputId, btnEl) {
   btnEl.disabled = true;
   btnEl.textContent = 'Saving...';
   try {
-    const res = await fetch('/api/scans', { method: 'POST', body: fd });
+    const res = await fetch('/api/scans', {
+      method: 'POST',
+      body: fd,
+      headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : {}
+    });
     const data = await res.json();
     if (!res.ok) {
       toast(data.error || 'Save failed', false);
