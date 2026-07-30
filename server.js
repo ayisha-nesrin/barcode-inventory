@@ -19,6 +19,10 @@ const exportRoutes = require('./export-routes');
 const searchRoutes = require('./search-routes');
 const verticalRoutes = require('./vertical-routes');
 const vendorRoutes = require('./vendor-routes');
+const auditRoutes = require('./audit-routes');
+const notificationRoutes = require('./notification-routes');
+const { requireCsrf } = require('./csrf-middleware');
+const { generalLimiter } = require('./rate-limit-config');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -69,6 +73,21 @@ Object.entries(publicFiles).forEach(([route, file]) => {
   app.get(route, (req, res) => res.sendFile(path.join(__dirname, file)));
 });
 
+// Business vertical logos are static branding assets checked into the repo
+// (not user-uploaded content), so they're served directly - no database
+// storage needed, and unlike product photos they don't need to survive an
+// ephemeral disk since they're redeployed with the code every time.
+app.use('/logos', express.static(path.join(__dirname, 'logos')));
+
+// General abuse-throttling on the whole API (login gets its own tighter
+// limiter inside auth-routes.js), then CSRF verification on every
+// state-changing request from an already-logged-in session. requireCsrf is
+// mounted with no path prefix (rather than under '/api') so req.path
+// inside it is still the full original path like '/api/auth/login' -
+// that's what its EXEMPT_PATHS check compares against.
+app.use('/api', generalLimiter);
+app.use(requireCsrf);
+
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/assets', assetRoutes);
@@ -79,6 +98,8 @@ app.use('/api/export', exportRoutes);
 app.use('/api/search', searchRoutes);
 app.use('/api/verticals', verticalRoutes);
 app.use('/api/vendors', vendorRoutes);
+app.use('/api/audit-logs', auditRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Error handler
 app.use((err, req, res, next) => {
