@@ -63,7 +63,6 @@ async function logAudit({ username, vertical_id, action, ip_address, old_value, 
       ]
     );
   } catch (err) {
-    // Audit logging must never break the actual request it's attached to.
     console.error('Audit log write failed:', err.message);
   }
 }
@@ -81,11 +80,6 @@ async function initDB() {
     )
   `);
 
-  // Real logo files (checked into the repo under /logos, served as static
-  // assets - see server.js) replace the emoji placeholders for the three
-  // launch verticals. This UPDATE runs every startup but only touches rows
-  // that don't already have a logo set, so it's safe against an
-  // already-deployed database and won't stomp a logo you change later.
   await query(`UPDATE verticals SET logo_path = '/logos/aec-studies.png' WHERE code = 'aec-studies' AND logo_path IS NULL`);
   await query(`UPDATE verticals SET logo_path = '/logos/aec-residency.png' WHERE code = 'aec-residency' AND logo_path IS NULL`);
   await query(`UPDATE verticals SET logo_path = '/logos/aec-pixcel.png' WHERE code = 'aec-pixcel' AND logo_path IS NULL`);
@@ -109,7 +103,6 @@ async function initDB() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `);
-  // Migration path for anyone upgrading from the old admin/scanner build.
   await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS vertical_id INTEGER REFERENCES verticals(id)`);
 
   await query(`
@@ -274,7 +267,6 @@ async function seed() {
   const { rows: assetRows } = await query('SELECT COUNT(*)::int AS count FROM assets');
   if (assetRows[0].count === 0) {
     const sampleAssets = [
-      // barcode, asset_name, vertical code, category, vendor, brand, model, serial, qty, location, department, assigned_employee, status
       ['AEC1000001', 'Dell Latitude 5420 Laptop', 'aec-residency', 'Electronics', 'Dell', 'Dell', 'Latitude 5420', 'DL9837282', 1, 'Front Office', 'Administration', 'John Smith', 'Assigned'],
       ['AEC1000002', 'Bath Soap (Guest Amenity)', 'aec-residency', 'Consumable', '', '', '', 'RESI-SOAP-001', 250, 'Housekeeping Store', 'Housekeeping', '', 'Available'],
       ['AEC1000003', 'Epson Projector EB-X06', 'aec-studies', 'Electronics', 'Canon', 'Epson', 'EB-X06', 'ST-PROJ-9001', 1, 'Lecture Hall 1', 'Academics', '', 'Available'],
