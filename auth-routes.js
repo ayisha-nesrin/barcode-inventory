@@ -1,6 +1,8 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const { query, logAudit } = require('./db-init');
+const { ensureCsrfToken } = require('./csrf-middleware');
+const { loginLimiter } = require('./rate-limit-config');
 const router = express.Router();
 
 async function buildSessionUser(userRow) {
@@ -19,7 +21,7 @@ async function buildSessionUser(userRow) {
   };
 }
 
-router.post('/login', async (req, res, next) => {
+router.post('/login', loginLimiter, async (req, res, next) => {
   try {
     const { username, password } = req.body || {};
     if (!username || !password) {
@@ -32,8 +34,9 @@ router.post('/login', async (req, res, next) => {
       return res.status(401).json({ error: 'Invalid username or password' });
     }
     req.session.user = await buildSessionUser(user);
+    const csrfToken = ensureCsrfToken(req);
     await logAudit({ username: user.username, vertical_id: user.vertical_id, action: 'Login', ip_address: req.ip });
-    res.json({ user: req.session.user });
+    res.json({ user: req.session.user, csrfToken });
   } catch (err) {
     next(err);
   }
@@ -51,7 +54,8 @@ router.get('/me', (req, res) => {
   if (!req.session || !req.session.user) {
     return res.status(401).json({ error: 'Not logged in' });
   }
-  res.json({ user: req.session.user });
+  const csrfToken = ensureCsrfToken(req);
+  res.json({ user: req.session.user, csrfToken });
 });
 
 module.exports = router;
