@@ -26,7 +26,11 @@ async function generateUniqueBarcode() {
   throw new Error('Could not generate a unique barcode, please try again');
 }
 
-async function assertSerialNumberFree(serial_number, excludeId) {
+// auditContext (optional): { username, vertical_id, ip_address } - when
+// given, a blocked duplicate attempt is recorded to the audit log so it can
+// surface as a notification, in addition to the 409 the caller sees
+// immediately.
+async function assertSerialNumberFree(serial_number, excludeId, auditContext) {
   if (!serial_number) return;
   const params = [serial_number];
   let sql = 'SELECT id FROM assets WHERE serial_number = $1';
@@ -36,6 +40,9 @@ async function assertSerialNumberFree(serial_number, excludeId) {
   }
   const { rows } = await query(sql, params);
   if (rows.length) {
+    if (auditContext) {
+      await logAudit({ ...auditContext, action: 'Duplicate Serial Number Blocked', new_value: { serial_number } });
+    }
     const err = new Error('This Serial Number is already registered to another asset');
     err.status = 409;
     throw err;
@@ -96,6 +103,35 @@ router.get('/', async (req, res, next) => {
   }
 });
 
+// Recycle Bin - Super Admin only. Placed ABOVE the GET /:barcode route
+// below so the literal path "recycle-bin" is never swallowed by that
+// wildcard param route.
+router.get('/recycle-bin', requireSuperAdmin, async (req, res, next) => {
+  try {
+    const { rows } = await query(`${SELECT_BASE} WHERE a.deleted_at IS NOT NULL ORDER BY a.deleted_at DESC`);
+    res.json({ assets: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/:id/restore', requireSuperAdmin, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const { rows: existing } = await query('SELECT * FROM assets WHERE id = $1 AND deleted_at IS NOT NULL', [id]);
+    if (!existing.length) return res.status(404).json({ error: 'Asset not found in Recycle Bin' });
+
+    const { rows } = await query('UPDATE assets SET deleted_at = NULL WHERE id = $1 RETURNING *', [id]);
+    await logAudit({
+      username: req.session.user.username, vertical_id: existing[0].vertical_id, action: 'Asset Restored',
+      ip_address: req.ip, old_value: { deleted_at: existing[0].deleted_at }, new_value: rows[0]
+    });
+    res.json({ asset: rows[0] });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Generate a brand-new barcode for an asset that doesn't have one printed
 // on it yet ("Create Barcode" flow).
 router.post('/generate-barcode', async (req, res, next) => {
@@ -117,7 +153,7 @@ router.post('/generate-barcode', async (req, res, next) => {
       vertical_id = Number(requestedVerticalId);
     }
 
-    await assertSerialNumberFree(serial_number);
+    await assertSerialNumberFree(serial_number, undefined, { username: user.username, vertical_id, ip_address: req.ip });
 
     const barcode = await generateUniqueBarcode();
     const { rows } = await query(
@@ -202,8 +238,11 @@ router.post('/', async (req, res, next) => {
     }
 
     const { rows: existingBarcode } = await query('SELECT id FROM assets WHERE barcode = $1', [barcode]);
-    if (existingBarcode.length) return res.status(409).json({ error: 'An asset with this barcode already exists' });
-    await assertSerialNumberFree(serial_number);
+    if (existingBarcode.length) {
+      await logAudit({ username: user.username, vertical_id, action: 'Duplicate Barcode Blocked', ip_address: req.ip, new_value: { barcode } });
+      return res.status(409).json({ error: 'An asset with this barcode already exists' });
+    }
+    await assertSerialNumberFree(serial_number, undefined, { username: user.username, vertical_id, ip_address: req.ip });
 
     const { rows } = await query(
       `INSERT INTO assets (barcode, asset_name, vertical_id, category, vendor_id, brand, model, serial_number, quantity, purchase_date, warranty_expiry, location, department, assigned_employee, remarks, image_path)
@@ -241,7 +280,7 @@ router.put('/:id', async (req, res, next) => {
     } = req.body || {};
 
     if (serial_number !== undefined && serial_number !== existingRows[0].serial_number) {
-      await assertSerialNumberFree(serial_number, id);
+      await assertSerialNumberFree(serial_number, id, { username: req.session.user.username, vertical_id: existingRows[0].vertical_id, ip_address: req.ip });
     }
 
     const fields = [];
@@ -366,6 +405,10 @@ router.post('/:id/assign', async (req, res, next) => {
 
     const { rows: activeAssignments } = await query('SELECT * FROM asset_assignments WHERE asset_id = $1 AND returned_at IS NULL', [id]);
     if (activeAssignments.length) {
+      await logAudit({
+        username: req.session.user.username, vertical_id: existing[0].vertical_id, action: 'Duplicate Assignment Blocked',
+        ip_address: req.ip, new_value: { asset_id: id, attempted_employee: employee_name, currently_assigned_to: activeAssignments[0].employee_name }
+      });
       return res.status(409).json({ error: `Asset already assigned to ${activeAssignments[0].employee_name}. Return it before reassigning.` });
     }
 
