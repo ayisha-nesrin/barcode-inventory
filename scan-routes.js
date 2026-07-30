@@ -68,6 +68,7 @@ router.post('/', upload.single('photo'), async (req, res, next) => {
 
       const { rows: dupSerial } = await query('SELECT id FROM assets WHERE serial_number = $1', [serial_number]);
       if (dupSerial.length) {
+        await logAudit({ username: user.username, vertical_id, action: 'Duplicate Serial Number Blocked', ip_address: req.ip, new_value: { serial_number, barcode } });
         return res.status(409).json({ error: 'This Serial Number is already registered to another asset' });
       }
 
