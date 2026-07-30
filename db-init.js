@@ -81,6 +81,15 @@ async function initDB() {
     )
   `);
 
+  // Real logo files (checked into the repo under /logos, served as static
+  // assets - see server.js) replace the emoji placeholders for the three
+  // launch verticals. This UPDATE runs every startup but only touches rows
+  // that don't already have a logo set, so it's safe against an
+  // already-deployed database and won't stomp a logo you change later.
+  await query(`UPDATE verticals SET logo_path = '/logos/aec-studies.png' WHERE code = 'aec-studies' AND logo_path IS NULL`);
+  await query(`UPDATE verticals SET logo_path = '/logos/aec-residency.png' WHERE code = 'aec-residency' AND logo_path IS NULL`);
+  await query(`UPDATE verticals SET logo_path = '/logos/aec-pixcel.png' WHERE code = 'aec-pixcel' AND logo_path IS NULL`);
+
   await query(`
     CREATE TABLE IF NOT EXISTS vendors (
       id SERIAL PRIMARY KEY,
@@ -196,10 +205,10 @@ async function seed() {
   let verticals;
   if (vertRows[0].count === 0) {
     const { rows } = await query(
-      `INSERT INTO verticals (code, name, icon) VALUES
-        ('aec-studies', 'AEC Studies', '🟦'),
-        ('aec-residency', 'AEC Residency', '🏨'),
-        ('aec-pixcel', 'AEC Pixcel', '🎬')
+      `INSERT INTO verticals (code, name, icon, logo_path) VALUES
+        ('aec-studies', 'AEC Studies', '🟦', '/logos/aec-studies.png'),
+        ('aec-residency', 'AEC Residency', '🏨', '/logos/aec-residency.png'),
+        ('aec-pixcel', 'AEC Pixcel', '🎬', '/logos/aec-pixcel.png')
        RETURNING *`
     );
     verticals = rows;
