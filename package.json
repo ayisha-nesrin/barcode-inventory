@@ -1,8 +1,8 @@
 {
-  "name": "aec-barcode-inventory",
-  "version": "1.0.0",
+  "name": "aec-group-eams",
+  "version": "2.0.0",
   "private": true,
-  "description": "AEC Barcode Scanner Inventory Management System - mobile scanning PWA + admin panel",
+  "description": "AEC Group Enterprise Asset Management System - multi-tenant asset tracking, barcode/QR scanning PWA, admin panel",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -12,6 +12,7 @@
     "dotenv": "^16.4.5",
     "exceljs": "^4.4.0",
     "express": "^4.19.2",
+    "express-rate-limit": "^7.4.0",
     "express-session": "^1.18.1",
     "multer": "^1.4.5-lts.1",
     "pdfkit": "^0.15.0",
