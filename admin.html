@@ -168,9 +168,14 @@
     <div class="badge" id="scopeBadge"></div>
     <div class="userinfo" id="userinfo"></div>
   </div>
-  <div>
+  <div style="position:relative;">
+    <button id="notifBtn" style="position:relative;">🔔<span id="notifCount" class="hidden" style="position:absolute;top:2px;right:2px;background:var(--red);color:#fff;border-radius:10px;font-size:10px;font-weight:700;padding:1px 5px;line-height:1.3;">0</span></button>
     <a href="/scan.html">Scanner</a>
     <button id="logoutBtn">Logout</button>
+    <div id="notifPanel" class="hidden" style="position:absolute;top:calc(100% + 6px);right:0;width:320px;max-width:90vw;max-height:70vh;overflow-y:auto;background:#fff;color:#111827;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.2);z-index:60;">
+      <div style="padding:12px 14px;font-weight:700;font-size:13px;border-bottom:1px solid var(--border);">Notifications</div>
+      <div id="notifList"></div>
+    </div>
   </div>
 </header>
 
@@ -181,6 +186,8 @@
   <button class="tab-btn" data-tab="vendors">Vendors</button>
   <button class="tab-btn" data-tab="businesses" id="navBusinesses">Businesses</button>
   <button class="tab-btn" data-tab="users" id="navUsers">Users</button>
+  <button class="tab-btn" data-tab="recyclebin" id="navRecycleBin">Recycle Bin</button>
+  <button class="tab-btn" data-tab="auditlog" id="navAuditLog">Audit Log</button>
 </nav>
 
 <main>
@@ -385,6 +392,42 @@
     </div>
   </section>
 
+  <!-- RECYCLE BIN (Super Admin only) -->
+  <section class="tab" id="tab-recyclebin">
+    <div class="panel">
+      <h2>Recycle Bin <small>Soft-deleted assets — restore or leave in place, nothing is ever hard-deleted</small></h2>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th>Barcode</th><th>Asset Name</th><th>Business</th><th>Serial No.</th><th>Deleted At</th><th>Actions</th></tr></thead>
+        <tbody id="recycleBinBody"></tbody>
+      </table>
+      </div>
+      <div class="empty hidden" id="recycleBinEmpty">Recycle Bin is empty.</div>
+    </div>
+  </section>
+
+  <!-- AUDIT LOG (Super Admin only) -->
+  <section class="tab" id="tab-auditlog">
+    <div class="panel">
+      <h2>Audit Log <small>Append-only history of every action — cannot be edited or deleted</small></h2>
+      <div class="toolbar">
+        <input type="text" id="auditUsername" placeholder="Filter by username">
+        <select id="auditAction"><option value="">All Actions</option></select>
+        <select id="auditVertical"><option value="">All Businesses</option></select>
+        <input type="date" id="auditFrom">
+        <input type="date" id="auditTo">
+        <button class="btn btn-primary" id="applyAuditFilter">Filter</button>
+      </div>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th>Time</th><th>User</th><th>Business</th><th>Action</th><th>IP</th><th>Details</th></tr></thead>
+        <tbody id="auditLogBody"></tbody>
+      </table>
+      </div>
+      <div class="empty hidden" id="auditLogEmpty">No audit log entries match this filter.</div>
+    </div>
+  </section>
+
 </main>
 
 <!-- Edit Asset Modal -->
@@ -526,6 +569,7 @@ let currentUser = null;
 let assetsCache = [];
 let verticalsCache = [];
 let vendorsCache = [];
+let csrfToken = null;
 
 function toast(msg, ok = true) {
   const t = document.getElementById('toast');
@@ -536,6 +580,11 @@ function toast(msg, ok = true) {
 }
 
 async function api(url, opts) {
+  opts = opts || {};
+  const method = (opts.method || 'GET').toUpperCase();
+  if (method !== 'GET' && csrfToken) {
+    opts.headers = Object.assign({}, opts.headers, { 'X-CSRF-Token': csrfToken });
+  }
   const res = await fetch(url, opts);
   let data = {};
   try { data = await res.json(); } catch (e) {}
@@ -556,6 +605,7 @@ async function init() {
     return;
   }
   currentUser = me.user;
+  csrfToken = me.csrfToken || null;
   if (currentUser.role === 'employee') {
     window.location.href = '/scan.html';
     return;
@@ -565,12 +615,17 @@ async function init() {
   if (isSuperAdmin()) {
     scopeBadge.textContent = '🌐 All Businesses';
   } else {
-    scopeBadge.textContent = `${currentUser.vertical.icon || '🏢'} ${currentUser.vertical.name}`;
+    const v = currentUser.vertical;
+    scopeBadge.innerHTML = v.logo_path
+      ? `<img src="${v.logo_path}" alt="${esc(v.name)}" style="width:16px;height:16px;object-fit:contain;vertical-align:-3px;margin-right:2px;">${esc(v.name)}`
+      : `${v.icon || '🏢'} ${esc(v.name)}`;
   }
 
   if (!isSuperAdmin()) {
     document.getElementById('navUsers').remove();
     document.getElementById('navBusinesses').remove();
+    document.getElementById('navRecycleBin').remove();
+    document.getElementById('navAuditLog').remove();
   } else {
     document.getElementById('assetBusinessHeader').classList.remove('hidden');
     document.getElementById('recentBusinessHeader').classList.remove('hidden');
@@ -604,10 +659,20 @@ async function init() {
     window.location.href = '/login.html';
   });
 
+  document.getElementById('notifBtn').addEventListener('click', toggleNotifPanel);
+  document.addEventListener('click', (e) => {
+    const panel = document.getElementById('notifPanel');
+    const btn = document.getElementById('notifBtn');
+    if (!panel.classList.contains('hidden') && !panel.contains(e.target) && e.target !== btn) {
+      panel.classList.add('hidden');
+    }
+  });
+
   await loadVerticals();
   await loadVendors();
   loadDashboard();
   loadAssets();
+  loadNotifications();
 
   document.getElementById('assetSearch').addEventListener('input', debounce(() => loadAssets(), 300));
   document.getElementById('assetStatusFilter').addEventListener('change', loadAssets);
@@ -639,9 +704,11 @@ async function init() {
     document.getElementById('addUserBtn').addEventListener('click', addUser);
     document.getElementById('addBizBtn').addEventListener('click', addBusiness);
     document.getElementById('newUserRole').addEventListener('change', updateUserVerticalVisibility);
+    document.getElementById('applyAuditFilter').addEventListener('click', loadAuditLog);
     updateUserVerticalVisibility();
     loadUsers();
     loadBusinesses();
+    loadAuditActions();
   }
 }
 
@@ -658,16 +725,18 @@ function switchTab(tab) {
   if (tab === 'vendors') loadVendors();
   if (tab === 'businesses' && isSuperAdmin()) loadBusinesses();
   if (tab === 'users' && isSuperAdmin()) loadUsers();
+  if (tab === 'recyclebin' && isSuperAdmin()) loadRecycleBin();
+  if (tab === 'auditlog' && isSuperAdmin()) loadAuditLog();
 }
 
 // ---------- LOOKUPS ----------
 async function loadVerticals() {
   const data = await api('/api/verticals');
   verticalsCache = data.verticals;
-  ['cbVertical', 'addVertical', 'assetVerticalFilter', 'newUserVertical'].forEach((id) => {
+  ['cbVertical', 'addVertical', 'assetVerticalFilter', 'newUserVertical', 'auditVertical'].forEach((id) => {
     const el = document.getElementById(id);
     if (!el) return;
-    const keepFirst = id === 'assetVerticalFilter';
+    const keepFirst = id === 'assetVerticalFilter' || id === 'auditVertical';
     el.innerHTML = keepFirst ? '<option value="">All Businesses</option>' : '';
     verticalsCache.forEach((v) => {
       const opt = document.createElement('option');
@@ -1122,7 +1191,7 @@ async function loadBusinesses() {
   const data = await api('/api/verticals');
   const list = document.getElementById('businessesList');
   list.innerHTML = data.verticals.map((v) => `
-    <div class="vertical-card"><div class="icon">${v.icon || '🏢'}</div><div><b>${esc(v.name)}</b><div style="font-size:11px;color:#6b7280;">${esc(v.code)}</div></div></div>
+    <div class="vertical-card"><div class="icon">${v.logo_path ? `<img src="${v.logo_path}" alt="${esc(v.name)}" style="width:32px;height:32px;object-fit:contain;">` : (v.icon || '🏢')}</div><div><b>${esc(v.name)}</b><div style="font-size:11px;color:#6b7280;">${esc(v.code)}</div></div></div>
   `).join('');
 }
 
@@ -1288,6 +1357,107 @@ async function runGlobalSearch() {
 
   const noResults = data.assets.length === 0 && data.scans.length === 0;
   document.getElementById('searchNoResults').classList.toggle('hidden', !noResults);
+}
+
+// ---------- RECYCLE BIN (Super Admin) ----------
+async function loadRecycleBin() {
+  const data = await api('/api/assets/recycle-bin');
+  const body = document.getElementById('recycleBinBody');
+  body.innerHTML = '';
+  (data.assets || []).forEach((a) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="font-family:monospace">${esc(a.barcode)}</td>
+      <td>${esc(a.asset_name)}</td>
+      <td><span class="vertical-chip">${a.vertical_icon || ''} ${esc(a.vertical_name)}</span></td>
+      <td style="font-family:monospace">${esc(a.serial_number)}</td>
+      <td>${new Date(a.deleted_at).toLocaleString()}</td>
+      <td><button class="btn btn-success btn-sm" onclick="restoreAsset(${a.id})">Restore</button></td>`;
+    body.appendChild(tr);
+  });
+  document.getElementById('recycleBinEmpty').classList.toggle('hidden', (data.assets || []).length > 0);
+}
+
+async function restoreAsset(id) {
+  if (!confirm('Restore this asset out of the Recycle Bin?')) return;
+  try {
+    await api(`/api/assets/${id}/restore`, { method: 'POST' });
+    toast('Asset restored');
+    loadRecycleBin();
+    loadAssets();
+    loadDashboard();
+  } catch (e) { toast(e.message, false); }
+}
+
+// ---------- AUDIT LOG (Super Admin) ----------
+async function loadAuditActions() {
+  try {
+    const data = await api('/api/audit-logs/actions');
+    const sel = document.getElementById('auditAction');
+    (data.actions || []).forEach((a) => {
+      const opt = document.createElement('option');
+      opt.value = a; opt.textContent = a;
+      sel.appendChild(opt);
+    });
+  } catch (e) {}
+}
+
+async function loadAuditLog() {
+  const params = new URLSearchParams();
+  const username = document.getElementById('auditUsername').value.trim();
+  const action = document.getElementById('auditAction').value;
+  const vertical_id = document.getElementById('auditVertical').value;
+  const from = document.getElementById('auditFrom').value;
+  const to = document.getElementById('auditTo').value;
+  if (username) params.set('username', username);
+  if (action) params.set('action', action);
+  if (vertical_id) params.set('vertical_id', vertical_id);
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+
+  const data = await api('/api/audit-logs?' + params.toString());
+  const body = document.getElementById('auditLogBody');
+  body.innerHTML = '';
+  (data.logs || []).forEach((l) => {
+    const tr = document.createElement('tr');
+    const bizCell = l.vertical_name ? `${l.vertical_icon || ''} ${esc(l.vertical_name)}` : '&mdash;';
+    let details = '';
+    if (l.new_value) { try { details = esc(JSON.stringify(JSON.parse(l.new_value))); } catch (e) { details = esc(l.new_value); } }
+    tr.innerHTML = `<td>${new Date(l.ts).toLocaleString()}</td><td>${esc(l.username || 'system')}</td><td>${bizCell}</td><td>${esc(l.action)}</td><td>${esc(l.ip_address || '-')}</td><td style="font-size:11px;color:#6b7280;max-width:260px;white-space:normal;">${details}</td>`;
+    body.appendChild(tr);
+  });
+  document.getElementById('auditLogEmpty').classList.toggle('hidden', (data.logs || []).length > 0);
+}
+
+// ---------- NOTIFICATIONS ----------
+function toggleNotifPanel() {
+  const panel = document.getElementById('notifPanel');
+  const wasHidden = panel.classList.contains('hidden');
+  panel.classList.toggle('hidden');
+  if (wasHidden) loadNotifications();
+}
+
+async function loadNotifications() {
+  try {
+    const data = await api('/api/notifications');
+    const countEl = document.getElementById('notifCount');
+    const n = data.count || 0;
+    countEl.textContent = n > 99 ? '99+' : String(n);
+    countEl.classList.toggle('hidden', n === 0);
+
+    const list = document.getElementById('notifList');
+    if (!data.notifications || data.notifications.length === 0) {
+      list.innerHTML = '<div style="padding:16px;text-align:center;color:#9ca3af;font-size:12px;">No notifications right now.</div>';
+      return;
+    }
+    list.innerHTML = data.notifications.slice(0, 40).map((n) => {
+      const color = n.severity === 'danger' ? 'var(--red)' : 'var(--amber)';
+      return `<div style="padding:10px 14px;border-bottom:1px solid #f3f4f6;font-size:12px;">
+        <div style="color:${color};font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.03em;margin-bottom:2px;">${esc(n.type.replace('_',' '))}</div>
+        <div>${esc(n.message)}</div>
+      </div>`;
+    }).join('');
+  } catch (e) {}
 }
 
 function esc(str) {
