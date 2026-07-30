@@ -81,7 +81,10 @@ async function showVerticalContext() {
     const data = await res.json();
     const v = (data.verticals || []).find((x) => x.code === code);
     if (!v) return;
-    document.getElementById('vcIcon').textContent = v.icon || '🏢';
+    const iconEl = document.getElementById('vcIcon');
+    iconEl.innerHTML = v.logo_path
+      ? `<img src="${v.logo_path}" alt="${v.name}" style="width:30px;height:30px;object-fit:contain;">`
+      : (v.icon || '🏢');
     document.getElementById('vcName').textContent = v.name;
     document.getElementById('verticalContext').classList.remove('hidden');
   } catch (e) {}
