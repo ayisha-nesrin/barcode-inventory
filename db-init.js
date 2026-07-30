@@ -198,6 +198,28 @@ async function initDB() {
   `);
 
   await seed();
+  await ensureSuperAdmin();
+}
+
+// The full demo seed below only runs once, when the `users` table is
+// completely empty - that's the right call for a brand-new database, but it
+// means anyone upgrading from an older, pre-multi-tenant version of this app
+// (which already had its own admin/scanner accounts sitting in `users`)
+// would never get a working super_admin login at all, since that "table is
+// empty" check would already be false. This runs on every startup,
+// independently of the seed() check above, and guarantees a working
+// super_admin account always exists - creating 'superadmin' / 'super123' if
+// no super_admin exists yet, without touching any other existing users.
+async function ensureSuperAdmin() {
+  const { rows } = await query(`SELECT COUNT(*)::int AS count FROM users WHERE role = 'super_admin'`);
+  if (rows[0].count > 0) return;
+  await query(
+    `INSERT INTO users (username, password_hash, full_name, role, vertical_id)
+     VALUES ($1, $2, $3, 'super_admin', NULL)
+     ON CONFLICT (username) DO UPDATE SET password_hash = EXCLUDED.password_hash, role = 'super_admin', vertical_id = NULL`,
+    ['superadmin', bcrypt.hashSync('super123', 10), 'AEC Group Super Admin']
+  );
+  console.log('No super_admin account existed - created superadmin / super123');
 }
 
 async function seed() {
