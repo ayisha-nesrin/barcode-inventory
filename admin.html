@@ -614,11 +614,16 @@ async function init() {
   const scopeBadge = document.getElementById('scopeBadge');
   if (isSuperAdmin()) {
     scopeBadge.textContent = '🌐 All Businesses';
-  } else {
+  } else if (currentUser.vertical) {
     const v = currentUser.vertical;
     scopeBadge.innerHTML = v.logo_path
       ? `<img src="${v.logo_path}" alt="${esc(v.name)}" style="width:16px;height:16px;object-fit:contain;vertical-align:-3px;margin-right:2px;">${esc(v.name)}`
       : `${v.icon || '🏢'} ${esc(v.name)}`;
+  } else {
+    // Legacy/pre-migration accounts (e.g. an old "admin" role from before
+    // business verticals existed) have no vertical assigned. Don't crash -
+    // just show a plain fallback so the rest of init() still runs.
+    scopeBadge.textContent = currentUser.role ? currentUser.role.replace('_', ' ') : 'No business assigned';
   }
 
   if (!isSuperAdmin()) {
