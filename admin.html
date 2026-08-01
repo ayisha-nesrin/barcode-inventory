@@ -122,7 +122,9 @@
   .assign-box{background:#f8fafc;border-radius:8px;padding:10px;margin-top:6px;}
   .business-table td, .business-table th{white-space:normal;}
 
-  .vertical-card{display:flex;align-items:center;gap:10px;background:#f8fafc;border-radius:8px;padding:10px;margin-bottom:8px;}
+  .vertical-card{display:flex;align-items:center;gap:10px;background:#f8fafc;border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer;transition:background .12s ease;}
+  .vertical-card:hover{background:#eef2ff;}
+  .vertical-card:active{background:#e0e7ff;}
   .vertical-card .icon{font-size:24px;}
 
   /* Tablet and up */
@@ -359,7 +361,7 @@
         <input type="text" id="newBizIcon" placeholder="Icon (emoji, e.g. 🏨)">
         <button class="btn btn-primary" id="addBizBtn">+ Add Business</button>
       </div>
-      <p class="toolbar-hint">New businesses appear immediately across the whole system (landing page, dropdowns, user creation) &mdash; no code changes or redeploy needed.</p>
+      <p class="toolbar-hint">New businesses appear immediately across the whole system (landing page, dropdowns, user creation) &mdash; no code changes or redeploy needed. Click a business below to jump straight to its assets.</p>
       <div id="businessesList"></div>
     </div>
   </section>
@@ -850,10 +852,10 @@ function statusChip(status) {
   return `<span class="status-chip status-${status}">${esc(status)}</span>`;
 }
 
-async function loadAssets() {
+async function loadAssets(overrideVerticalId) {
   const q = document.getElementById('assetSearch').value.trim();
   const status = document.getElementById('assetStatusFilter').value;
-  const vertical_id = document.getElementById('assetVerticalFilter').value;
+  const vertical_id = overrideVerticalId !== undefined ? overrideVerticalId : document.getElementById('assetVerticalFilter').value;
   const params = new URLSearchParams();
   if (q) params.set('q', q);
   if (status) params.set('status', status);
@@ -1196,8 +1198,22 @@ async function loadBusinesses() {
   const data = await api('/api/verticals');
   const list = document.getElementById('businessesList');
   list.innerHTML = data.verticals.map((v) => `
-    <div class="vertical-card"><div class="icon">${v.logo_path ? `<img src="${v.logo_path}" alt="${esc(v.name)}" style="width:32px;height:32px;object-fit:contain;">` : (v.icon || '🏢')}</div><div><b>${esc(v.name)}</b><div style="font-size:11px;color:#6b7280;">${esc(v.code)}</div></div></div>
+    <div class="vertical-card" onclick="goToBusinessAssets(${v.id})">
+      <div class="icon">${v.logo_path ? `<img src="${v.logo_path}" alt="${esc(v.name)}" style="width:32px;height:32px;object-fit:contain;">` : (v.icon || '🏢')}</div>
+      <div><b>${esc(v.name)}</b><div style="font-size:11px;color:#6b7280;">${esc(v.code)}</div></div>
+    </div>
   `).join('');
+}
+
+// Clicking a business card jumps straight to that business's assets - flip
+// to the Assets tab, pre-select this vertical in the filter dropdown, and
+// reload the list scoped to it (Super Admin only feature, since only they
+// see multiple businesses at once).
+function goToBusinessAssets(verticalId) {
+  switchTab('assets');
+  const filter = document.getElementById('assetVerticalFilter');
+  if (filter) filter.value = verticalId;
+  loadAssets(verticalId);
 }
 
 async function addBusiness() {

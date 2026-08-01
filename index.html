@@ -68,6 +68,10 @@ async function loadVerticals() {
       document.getElementById('empty').classList.remove('hidden');
       return;
     }
+    // Belt-and-suspenders: explicitly hide the empty-state message whenever
+    // we successfully have verticals to show, regardless of its markup
+    // default, so a cached/older page load can never show both at once.
+    document.getElementById('empty').classList.add('hidden');
     container.innerHTML = data.verticals.map((v) => `
       <a class="card" href="/login.html?vertical=${encodeURIComponent(v.code)}">
         <div class="icon">${v.logo_path ? `<img src="${v.logo_path}" alt="${escHtml(v.name)}" style="width:56px;height:56px;object-fit:contain;">` : escHtml(v.icon || '🏢')}</div>
