@@ -63,6 +63,7 @@ async function logAudit({ username, vertical_id, action, ip_address, old_value, 
       ]
     );
   } catch (err) {
+    // Audit logging must never break the actual request it's attached to.
     console.error('Audit log write failed:', err.message);
   }
 }
@@ -80,6 +81,11 @@ async function initDB() {
     )
   `);
 
+  // Real logo files (checked into the repo under /logos, served as static
+  // assets - see server.js) replace the emoji placeholders for the three
+  // launch verticals. This UPDATE runs every startup but only touches rows
+  // that don't already have a logo set, so it's safe against an
+  // already-deployed database and won't stomp a logo you change later.
   await query(`UPDATE verticals SET logo_path = '/logos/aec-studies.png' WHERE code = 'aec-studies' AND logo_path IS NULL`);
   await query(`UPDATE verticals SET logo_path = '/logos/aec-residency.png' WHERE code = 'aec-residency' AND logo_path IS NULL`);
   await query(`UPDATE verticals SET logo_path = '/logos/aec-pixcel.png' WHERE code = 'aec-pixcel' AND logo_path IS NULL`);
@@ -103,6 +109,7 @@ async function initDB() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `);
+  // Migration path for anyone upgrading from the old admin/scanner build.
   await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS vertical_id INTEGER REFERENCES verticals(id)`);
 
   await query(`
@@ -176,6 +183,33 @@ async function initDB() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `);
+
+  // Same "already existed from before the EAMS migration" problem as the
+  // users table above, but for `scans` this time: the original pre-EAMS
+  // barcode app already had its own `scans` table with an older, narrower
+  // set of columns, so CREATE TABLE IF NOT EXISTS silently did nothing on
+  // any database upgrading from that version - it left the old columns in
+  // place instead of adding the new EAMS ones (asset_name, vertical_id,
+  // assigned_employee, etc.), which is exactly what caused the dashboard's
+  // search and stats endpoints to fail with "column ... does not exist".
+  // These ALTER TABLE ... ADD COLUMN IF NOT EXISTS statements run on every
+  // startup and are no-ops on a database that's already up to date, but
+  // they heal any older/legacy `scans` table shape up to the full schema
+  // above without touching or losing any existing rows.
+  await query(`ALTER TABLE scans ADD COLUMN IF NOT EXISTS asset_id INTEGER REFERENCES assets(id) ON DELETE SET NULL`);
+  await query(`ALTER TABLE scans ADD COLUMN IF NOT EXISTS vertical_id INTEGER REFERENCES verticals(id)`);
+  await query(`ALTER TABLE scans ADD COLUMN IF NOT EXISTS barcode TEXT`);
+  await query(`ALTER TABLE scans ADD COLUMN IF NOT EXISTS asset_name TEXT`);
+  await query(`ALTER TABLE scans ADD COLUMN IF NOT EXISTS scanned_by TEXT`);
+  await query(`ALTER TABLE scans ADD COLUMN IF NOT EXISTS device_name TEXT`);
+  await query(`ALTER TABLE scans ADD COLUMN IF NOT EXISTS device_id TEXT`);
+  await query(`ALTER TABLE scans ADD COLUMN IF NOT EXISTS scan_date TEXT`);
+  await query(`ALTER TABLE scans ADD COLUMN IF NOT EXISTS scan_time TEXT`);
+  await query(`ALTER TABLE scans ADD COLUMN IF NOT EXISTS location TEXT`);
+  await query(`ALTER TABLE scans ADD COLUMN IF NOT EXISTS department TEXT`);
+  await query(`ALTER TABLE scans ADD COLUMN IF NOT EXISTS assigned_employee TEXT`);
+  await query(`ALTER TABLE scans ADD COLUMN IF NOT EXISTS remarks TEXT`);
+  await query(`ALTER TABLE scans ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now()`);
 
   await query(`
     CREATE TABLE IF NOT EXISTS audit_logs (
@@ -267,6 +301,7 @@ async function seed() {
   const { rows: assetRows } = await query('SELECT COUNT(*)::int AS count FROM assets');
   if (assetRows[0].count === 0) {
     const sampleAssets = [
+      // barcode, asset_name, vertical code, category, vendor, brand, model, serial, qty, location, department, assigned_employee, status
       ['AEC1000001', 'Dell Latitude 5420 Laptop', 'aec-residency', 'Electronics', 'Dell', 'Dell', 'Latitude 5420', 'DL9837282', 1, 'Front Office', 'Administration', 'John Smith', 'Assigned'],
       ['AEC1000002', 'Bath Soap (Guest Amenity)', 'aec-residency', 'Consumable', '', '', '', 'RESI-SOAP-001', 250, 'Housekeeping Store', 'Housekeeping', '', 'Available'],
       ['AEC1000003', 'Epson Projector EB-X06', 'aec-studies', 'Electronics', 'Canon', 'Epson', 'EB-X06', 'ST-PROJ-9001', 1, 'Lecture Hall 1', 'Academics', '', 'Available'],
