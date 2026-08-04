@@ -111,10 +111,10 @@
       <button class="btn btn-primary" id="startBtn">Start Scanning (Barcode/QR)</button>
       <button class="btn btn-secondary hidden" id="stopBtn">Stop Camera</button>
       <div class="manual">
-        <input type="text" id="manualBarcode" placeholder="Or type barcode manually">
+        <input type="text" id="manualBarcode" placeholder="Wired/USB scanner ready — or type barcode manually" autocomplete="off">
         <button id="manualBtn">Go</button>
       </div>
-      <div class="device-info" id="deviceInfo"></div>
+      <div class="device-info" id="deviceInfo">A plugged-in (wired/USB/Bluetooth) barcode scanner works automatically — just aim and trigger it, no need to tap anything first.</div>
     </div>
 
     <div class="card hidden" id="foundCard">
@@ -262,7 +262,8 @@ async function init() {
       : `${v.icon || '🏢'} ${esc(v.name)}`;
   }
   if (currentUser.role !== 'employee') document.getElementById('adminLink').classList.remove('hidden');
-  document.getElementById('deviceInfo').textContent = `Device: ${getDeviceName()}`;
+  document.getElementById('deviceInfo').textContent = `Device: ${getDeviceName()} — a plugged-in wired/USB/Bluetooth barcode scanner also works automatically, just aim and trigger it.`;
+  focusManualInput();
 
   try {
     const { vendors } = await api('/api/vendors');
@@ -287,7 +288,26 @@ function switchView(view) {
   document.querySelectorAll('.sub-btn').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
   document.querySelectorAll('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-' + view));
   if (view === 'myassets') loadMyAssets();
+  if (view === 'scan') focusManualInput();
 }
+
+// A plugged-in wired/USB/Bluetooth barcode scanner behaves like a keyboard:
+// it "types" the barcode into whatever field is focused, then sends Enter.
+// Keeping #manualBarcode focused whenever we're idle on the scan screen
+// means the user can just aim and trigger the scanner with no camera and
+// no tapping required first - the existing Enter-key listener on that
+// field (see below) then submits it exactly like a manual entry.
+function focusManualInput() {
+  const el = document.getElementById('manualBarcode');
+  if (!el) return;
+  const scanCard = document.getElementById('scanCard');
+  if (scanCard && !scanCard.classList.contains('hidden')) {
+    setTimeout(() => el.focus({ preventScroll: true }), 50);
+  }
+}
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) focusManualInput();
+});
 
 async function loadMyAssets() {
   const list = document.getElementById('myAssetsList');
@@ -358,6 +378,7 @@ function stopScanning() {
   }
   document.getElementById('startBtn').classList.remove('hidden');
   document.getElementById('stopBtn').classList.add('hidden');
+  focusManualInput();
 }
 
 async function handleBarcode(barcode) {
@@ -415,6 +436,7 @@ function resetToScan() {
   document.getElementById('newCard').classList.add('hidden');
   document.getElementById('scanCard').classList.remove('hidden');
   currentBarcode = null;
+  focusManualInput();
 }
 
 document.getElementById('scanNextBtn1').addEventListener('click', resetToScan);

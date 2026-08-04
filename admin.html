@@ -136,6 +136,30 @@
   .vertical-card:active{background:#e0e7ff;}
   .vertical-card .icon{font-size:24px;}
 
+  /* Phones: turn every data table into a stack of labelled cards instead of
+     a horizontally-scrolling table. Each <td> keeps its value but is shown
+     on its own line with its column header (read from data-label) to the
+     left, so nothing needs to scroll sideways to be read. Desktop/tablet
+     (min-width:641px below) is untouched - tables there still render as
+     normal tables with their existing horizontal scroll-if-needed
+     behaviour via .table-wrap. */
+  @media (max-width: 640px) {
+    .table-wrap{overflow-x:visible;}
+    .table-wrap table{min-width:0;width:100%;}
+    .table-wrap thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;padding:0;margin:-1px;}
+    .table-wrap table, .table-wrap tbody, .table-wrap tr, .table-wrap td{display:block;width:100%;}
+    .table-wrap tr{border:1px solid var(--border);border-radius:10px;padding:6px 10px;margin-bottom:10px;background:#fff;}
+    .table-wrap tr:hover td{background:none;}
+    .table-wrap td{border:none;border-bottom:1px solid #f3f4f6;padding:8px 2px 8px 44%;white-space:normal;text-align:right;position:relative;min-height:20px;}
+    .table-wrap td:last-child{border-bottom:none;}
+    .table-wrap td::before{content:attr(data-label);position:absolute;left:2px;top:8px;width:40%;padding-right:8px;text-align:left;font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.03em;white-space:normal;}
+    .table-wrap td.stack-plain{padding-left:2px;text-align:left;}
+    .table-wrap td.stack-plain::before{content:none;position:static;}
+    .table-wrap td.actions{text-align:left;}
+    .table-wrap td.empty, .table-wrap td[colspan]{padding-left:2px;text-align:center;border-bottom:none;}
+    .table-wrap td.empty::before, .table-wrap td[colspan]::before{content:none;}
+  }
+
   /* Tablet and up */
   @media (min-width: 641px) {
     header{padding:14px 24px;}
@@ -782,7 +806,7 @@ async function loadVendors() {
     body.innerHTML = '';
     vendorsCache.forEach((v) => {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${esc(v.name)}</td><td>${new Date(v.created_at).toLocaleDateString()}</td>`;
+      tr.innerHTML = `<td data-label="Vendor">${esc(v.name)}</td><td data-label="Added">${new Date(v.created_at).toLocaleDateString()}</td>`;
       body.appendChild(tr);
     });
   }
@@ -828,29 +852,29 @@ async function loadDashboard() {
     const bwBody = document.getElementById('businessWiseBody');
     bwBody.innerHTML = stats.businessWise.map((b) => `
       <tr>
-        <td><span class="vertical-chip">${b.vertical.icon || ''} ${esc(b.vertical.name)}</span></td>
-        <td>${b.totalAssets}</td><td>${b.assignedAssets}</td><td>${b.availableAssets}</td>
-        <td>${b.lowStockAssets}</td><td>${b.warrantyExpiringAssets}</td>
+        <td data-label="Business"><span class="vertical-chip">${b.vertical.icon || ''} ${esc(b.vertical.name)}</span></td>
+        <td data-label="Total">${b.totalAssets}</td><td data-label="Assigned">${b.assignedAssets}</td><td data-label="Available">${b.availableAssets}</td>
+        <td data-label="Low Stock">${b.lowStockAssets}</td><td data-label="Warranty Expiring">${b.warrantyExpiringAssets}</td>
       </tr>`).join('');
 
     const topBody = document.getElementById('topUsedBody');
     topBody.innerHTML = (stats.topUsedAssets || []).map((a) => `
-      <tr><td>${esc(a.asset_name)}</td><td>${esc(a.vertical_name)}</td><td><span class="count-badge">${a.scan_count || 0}</span></td></tr>
+      <tr><td data-label="Asset">${esc(a.asset_name)}</td><td data-label="Business">${esc(a.vertical_name)}</td><td data-label="Times Scanned"><span class="count-badge">${a.scan_count || 0}</span></td></tr>
     `).join('') || '<tr><td colspan="3" class="empty">No scans yet.</td></tr>';
   }
 
   const vendorBody = document.getElementById('vendorSummaryBody');
-  vendorBody.innerHTML = Object.entries(stats.byVendor || {}).sort((a,b) => b[1]-a[1]).map(([k,v]) => `<tr><td>${esc(k)}</td><td>${v}</td></tr>`).join('') || '<tr><td colspan="2" class="empty">No data yet.</td></tr>';
+  vendorBody.innerHTML = Object.entries(stats.byVendor || {}).sort((a,b) => b[1]-a[1]).map(([k,v]) => `<tr><td data-label="Vendor">${esc(k)}</td><td data-label="Assets">${v}</td></tr>`).join('') || '<tr><td colspan="2" class="empty">No data yet.</td></tr>';
 
   const deptBody = document.getElementById('deptSummaryBody');
-  deptBody.innerHTML = Object.entries(stats.byDepartment || {}).sort((a,b) => b[1]-a[1]).map(([k,v]) => `<tr><td>${esc(k)}</td><td>${v}</td></tr>`).join('') || '<tr><td colspan="2" class="empty">No data yet.</td></tr>';
+  deptBody.innerHTML = Object.entries(stats.byDepartment || {}).sort((a,b) => b[1]-a[1]).map(([k,v]) => `<tr><td data-label="Department">${esc(k)}</td><td data-label="Assets">${v}</td></tr>`).join('') || '<tr><td colspan="2" class="empty">No data yet.</td></tr>';
 
   const body = document.getElementById('recentScansBody');
   body.innerHTML = '';
   (stats.recentScans || []).forEach((s) => {
     const tr = document.createElement('tr');
-    const bizCell = isSuperAdmin() ? `<td>${s.vertical_icon || ''} ${esc(s.vertical_name || '')}</td>` : '';
-    tr.innerHTML = `<td>${s.scan_date} ${s.scan_time}</td><td>${esc(s.barcode)}</td><td>${esc(s.asset_name)}</td>${bizCell}<td>${esc(s.scanned_by)}</td><td>${esc(s.device_name)}</td>`;
+    const bizCell = isSuperAdmin() ? `<td data-label="Business">${s.vertical_icon || ''} ${esc(s.vertical_name || '')}</td>` : '';
+    tr.innerHTML = `<td data-label="Date/Time">${s.scan_date} ${s.scan_time}</td><td data-label="Barcode">${esc(s.barcode)}</td><td data-label="Asset">${esc(s.asset_name)}</td>${bizCell}<td data-label="Scanned By">${esc(s.scanned_by)}</td><td data-label="Device">${esc(s.device_name)}</td>`;
     body.appendChild(tr);
   });
   document.getElementById('recentScansEmpty').classList.toggle('hidden', (stats.recentScans || []).length > 0);
@@ -877,18 +901,18 @@ async function loadAssets(overrideVerticalId) {
   data.assets.forEach((a) => {
     const tr = document.createElement('tr');
     const img = a.image_path ? `<img class="thumb" src="${a.image_path}">` : `<div class="thumb-empty"></div>`;
-    const bizCell = isSuperAdmin() ? `<td><span class="vertical-chip">${a.vertical_icon || ''} ${esc(a.vertical_name)}</span></td>` : '';
+    const bizCell = isSuperAdmin() ? `<td data-label="Business"><span class="vertical-chip">${a.vertical_icon || ''} ${esc(a.vertical_name)}</span></td>` : '';
     tr.innerHTML = `
-      <td>${img}</td>
-      <td style="font-family:monospace">${esc(a.barcode)}</td>
-      <td>${esc(a.asset_name)}</td>
+      <td class="stack-plain">${img}</td>
+      <td data-label="Barcode" style="font-family:monospace">${esc(a.barcode)}</td>
+      <td data-label="Asset Name">${esc(a.asset_name)}</td>
       ${bizCell}
-      <td>${esc(a.category || '-')}</td>
-      <td>${esc(a.vendor_name || '-')}</td>
-      <td style="font-family:monospace">${esc(a.serial_number)}</td>
-      <td>${a.quantity}</td>
-      <td>${statusChip(a.status)}</td>
-      <td>${esc(a.assigned_employee || '-')}</td>
+      <td data-label="Category">${esc(a.category || '-')}</td>
+      <td data-label="Vendor">${esc(a.vendor_name || '-')}</td>
+      <td data-label="Serial No." style="font-family:monospace">${esc(a.serial_number)}</td>
+      <td data-label="Qty">${a.quantity}</td>
+      <td data-label="Status">${statusChip(a.status)}</td>
+      <td data-label="Employee">${esc(a.assigned_employee || '-')}</td>
       <td class="actions">
         <button class="btn btn-secondary btn-sm" onclick="openEditModal(${a.id})">Edit</button>
         <button class="btn btn-secondary btn-sm" onclick="printLabel(${a.id})">Label</button>
@@ -1140,7 +1164,7 @@ async function loadHistory() {
   body.innerHTML = '';
   data.scans.forEach((s) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${s.scan_date}</td><td>${s.scan_time}</td><td style="font-family:monospace">${esc(s.barcode)}</td><td>${esc(s.asset_name)}</td><td>${esc(s.location || '-')}</td><td>${esc(s.assigned_employee || '-')}</td><td>${esc(s.scanned_by)}</td><td>${esc(s.device_name)}</td><td>${esc(s.remarks || '-')}</td>`;
+    tr.innerHTML = `<td data-label="Date">${s.scan_date}</td><td data-label="Time">${s.scan_time}</td><td data-label="Barcode" style="font-family:monospace">${esc(s.barcode)}</td><td data-label="Asset">${esc(s.asset_name)}</td><td data-label="Location">${esc(s.location || '-')}</td><td data-label="Employee">${esc(s.assigned_employee || '-')}</td><td data-label="Scanned By">${esc(s.scanned_by)}</td><td data-label="Device">${esc(s.device_name)}</td><td data-label="Remarks">${esc(s.remarks || '-')}</td>`;
     body.appendChild(tr);
   });
   document.getElementById('historyEmpty').classList.toggle('hidden', data.scans.length > 0);
@@ -1161,7 +1185,7 @@ async function loadUsers() {
   historySelect.innerHTML = '<option value="">All Users</option>';
   data.users.forEach((u) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${esc(u.username)}</td><td>${esc(u.full_name)}</td><td><span class="role-badge role-${u.role}">${u.role.replace('_',' ')}</span></td><td>${u.vertical_name ? (u.vertical_icon || '') + ' ' + esc(u.vertical_name) : '&mdash;'}</td><td>${new Date(u.created_at).toLocaleDateString()}</td><td><button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id})">Delete</button></td>`;
+    tr.innerHTML = `<td data-label="Username">${esc(u.username)}</td><td data-label="Full Name">${esc(u.full_name)}</td><td data-label="Role"><span class="role-badge role-${u.role}">${u.role.replace('_',' ')}</span></td><td data-label="Business">${u.vertical_name ? (u.vertical_icon || '') + ' ' + esc(u.vertical_name) : '&mdash;'}</td><td data-label="Created">${new Date(u.created_at).toLocaleDateString()}</td><td class="actions"><button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id})">Delete</button></td>`;
     body.appendChild(tr);
 
     const opt = document.createElement('option');
@@ -1369,7 +1393,7 @@ async function runGlobalSearch() {
   data.assets.forEach((a) => {
     const tr = document.createElement('tr');
     const img = a.image_path ? `<img class="thumb" src="${a.image_path}">` : `<div class="thumb-empty"></div>`;
-    tr.innerHTML = `<td>${img}</td><td style="font-family:monospace">${highlight(a.barcode, q)}</td><td>${highlight(a.asset_name, q)}</td><td>${a.vertical_icon || ''} ${highlight(a.vertical_name, q)}</td><td>${highlight(a.serial_number, q)}</td><td>${statusChip(a.status)}</td><td>${highlight(a.assigned_employee || '-', q)}</td>`;
+    tr.innerHTML = `<td class="stack-plain">${img}</td><td data-label="Barcode" style="font-family:monospace">${highlight(a.barcode, q)}</td><td data-label="Asset Name">${highlight(a.asset_name, q)}</td><td data-label="Business">${a.vertical_icon || ''} ${highlight(a.vertical_name, q)}</td><td data-label="Serial No.">${highlight(a.serial_number, q)}</td><td data-label="Status">${statusChip(a.status)}</td><td data-label="Employee">${highlight(a.assigned_employee || '-', q)}</td>`;
     pBody.appendChild(tr);
   });
   document.getElementById('searchAssetsCount').textContent = data.assets.length;
@@ -1379,7 +1403,7 @@ async function runGlobalSearch() {
   sBody.innerHTML = '';
   data.scans.forEach((s) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${highlight(s.scan_date, q)}</td><td>${highlight(s.scan_time, q)}</td><td style="font-family:monospace">${highlight(s.barcode, q)}</td><td>${highlight(s.asset_name, q)}</td><td>${highlight(s.scanned_by, q)}</td><td>${highlight(s.device_name, q)}</td>`;
+    tr.innerHTML = `<td data-label="Date">${highlight(s.scan_date, q)}</td><td data-label="Time">${highlight(s.scan_time, q)}</td><td data-label="Barcode" style="font-family:monospace">${highlight(s.barcode, q)}</td><td data-label="Asset">${highlight(s.asset_name, q)}</td><td data-label="Scanned By">${highlight(s.scanned_by, q)}</td><td data-label="Device">${highlight(s.device_name, q)}</td>`;
     sBody.appendChild(tr);
   });
   document.getElementById('searchScansCount').textContent = data.scans.length;
@@ -1397,12 +1421,12 @@ async function loadRecycleBin() {
   (data.assets || []).forEach((a) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td style="font-family:monospace">${esc(a.barcode)}</td>
-      <td>${esc(a.asset_name)}</td>
-      <td><span class="vertical-chip">${a.vertical_icon || ''} ${esc(a.vertical_name)}</span></td>
-      <td style="font-family:monospace">${esc(a.serial_number)}</td>
-      <td>${new Date(a.deleted_at).toLocaleString()}</td>
-      <td><button class="btn btn-success btn-sm" onclick="restoreAsset(${a.id})">Restore</button></td>`;
+      <td data-label="Barcode" style="font-family:monospace">${esc(a.barcode)}</td>
+      <td data-label="Asset Name">${esc(a.asset_name)}</td>
+      <td data-label="Business"><span class="vertical-chip">${a.vertical_icon || ''} ${esc(a.vertical_name)}</span></td>
+      <td data-label="Serial No." style="font-family:monospace">${esc(a.serial_number)}</td>
+      <td data-label="Deleted At">${new Date(a.deleted_at).toLocaleString()}</td>
+      <td class="actions"><button class="btn btn-success btn-sm" onclick="restoreAsset(${a.id})">Restore</button></td>`;
     body.appendChild(tr);
   });
   document.getElementById('recycleBinEmpty').classList.toggle('hidden', (data.assets || []).length > 0);
@@ -1453,7 +1477,7 @@ async function loadAuditLog() {
     const bizCell = l.vertical_name ? `${l.vertical_icon || ''} ${esc(l.vertical_name)}` : '&mdash;';
     let details = '';
     if (l.new_value) { try { details = esc(JSON.stringify(JSON.parse(l.new_value))); } catch (e) { details = esc(l.new_value); } }
-    tr.innerHTML = `<td>${new Date(l.ts).toLocaleString()}</td><td>${esc(l.username || 'system')}</td><td>${bizCell}</td><td>${esc(l.action)}</td><td>${esc(l.ip_address || '-')}</td><td style="font-size:11px;color:#6b7280;max-width:260px;white-space:normal;">${details}</td>`;
+    tr.innerHTML = `<td data-label="Time">${new Date(l.ts).toLocaleString()}</td><td data-label="User">${esc(l.username || 'system')}</td><td data-label="Business">${bizCell}</td><td data-label="Action">${esc(l.action)}</td><td data-label="IP">${esc(l.ip_address || '-')}</td><td data-label="Details" style="font-size:11px;color:#6b7280;max-width:260px;white-space:normal;">${details}</td>`;
     body.appendChild(tr);
   });
   document.getElementById('auditLogEmpty').classList.toggle('hidden', (data.logs || []).length > 0);
