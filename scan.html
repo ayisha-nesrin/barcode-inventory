@@ -144,6 +144,11 @@
     <div class="card hidden" id="newCard">
       <span class="badge-chip new">New Asset</span>
       <div class="prod-barcode" id="newBarcode"></div>
+      <div class="hidden" id="newVerticalWrap">
+        <label>Business Vertical <span class="required-mark">*</span></label>
+        <select id="newVerticalId"></select>
+        <div class="field-hint">Which business does this new asset belong to?</div>
+      </div>
       <label>Asset Name <span class="required-mark">*</span></label>
       <input type="text" id="newName" required>
       <label>Serial Number <span class="required-mark">*</span></label>
@@ -274,6 +279,27 @@ async function init() {
       sel.appendChild(opt);
     });
   } catch (e) {}
+
+  // Super admins aren't locked to a single business, so when they scan a
+  // brand-new barcode we need them to pick which vertical it belongs to
+  // (the server rejects a new-asset scan from a super admin with no
+  // vertical_id - see scan-routes.js). Regular employees/vertical admins
+  // already belong to exactly one vertical, so this stays hidden for them
+  // and the server infers it automatically from their account.
+  if (currentUser.role === 'super_admin') {
+    try {
+      const { verticals } = await api('/api/verticals');
+      const vsel = document.getElementById('newVerticalId');
+      vsel.innerHTML = '';
+      verticals.forEach((v) => {
+        const opt = document.createElement('option');
+        opt.value = v.id;
+        opt.textContent = `${v.icon || ''} ${v.name}`.trim();
+        vsel.appendChild(opt);
+      });
+      document.getElementById('newVerticalWrap').classList.remove('hidden');
+    } catch (e) {}
+  }
 
   document.querySelectorAll('.sub-btn').forEach((btn) => {
     btn.addEventListener('click', () => switchView(btn.dataset.view));
@@ -429,6 +455,8 @@ function showNew(barcode) {
   ['newName','newSerial','newCategory','newBrand','newModel','newPurchaseDate','newWarrantyExpiry','newLocation','newDepartment','newAssignedEmployee','newRemarks'].forEach((id) => document.getElementById(id).value = '');
   document.getElementById('newQuantity').value = 1;
   document.getElementById('newVendor').value = '';
+  const vsel = document.getElementById('newVerticalId');
+  if (vsel) vsel.selectedIndex = 0;
 }
 
 function resetToScan() {
@@ -501,10 +529,19 @@ saveNewBtn.addEventListener('click', () => {
     toast('Asset Name and Serial Number are required', false);
     return;
   }
+  let vertical_id = '';
+  if (currentUser.role === 'super_admin') {
+    vertical_id = document.getElementById('newVerticalId').value;
+    if (!vertical_id) {
+      toast('Please choose a Business Vertical for this asset', false);
+      return;
+    }
+  }
   submitScan(
     {
       asset_name: name,
       serial_number: serial,
+      vertical_id,
       category: document.getElementById('newCategory').value,
       vendor_id: document.getElementById('newVendor').value,
       brand: document.getElementById('newBrand').value,
