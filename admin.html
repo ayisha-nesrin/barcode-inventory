@@ -131,7 +131,7 @@
   .assign-box{background:#f8fafc;border-radius:8px;padding:10px;margin-top:6px;}
   .business-table td, .business-table th{white-space:normal;}
 
-  .vertical-card{display:flex;align-items:center;gap:10px;background:#f8fafc;border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer;transition:background .12s ease;}
+  .vertical-card{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#f8fafc;border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer;transition:background .12s ease;}
   .vertical-card:hover{background:#eef2ff;}
   .vertical-card:active{background:#e0e7ff;}
   .vertical-card .icon{font-size:24px;}
@@ -391,10 +391,16 @@
       <div class="toolbar">
         <input type="text" id="newBizName" placeholder="Business name (e.g. AEC Resorts)">
         <input type="text" id="newBizCode" placeholder="Short code (e.g. aec-resorts)">
-        <input type="text" id="newBizIcon" placeholder="Icon (emoji, e.g. 🏨)">
-        <button class="btn btn-primary" id="addBizBtn">+ Add Business</button>
+        <input type="text" id="newBizIcon" placeholder="Icon (emoji, e.g. 🏨) - optional if you upload a logo">
       </div>
-      <p class="toolbar-hint">New businesses appear immediately across the whole system (landing page, dropdowns, user creation) &mdash; no code changes or redeploy needed. Click a business below to jump straight to its assets.</p>
+      <div class="toolbar">
+        <div style="flex:1 1 100%;">
+          <label style="display:block;font-size:12px;font-weight:600;color:#374151;margin:0 0 5px;">Logo (optional)</label>
+          <input type="file" id="newBizLogo" accept="image/*">
+        </div>
+        <button class="btn btn-primary btn-block" id="addBizBtn">+ Add Business</button>
+      </div>
+      <p class="toolbar-hint">New businesses appear immediately across the whole system (landing page, dropdowns, user creation) &mdash; no code changes or redeploy needed. Upload an image here to give it a real logo (don't paste a web link into the Icon box - that field only takes a single emoji). Click a business below to jump straight to its assets.</p>
       <div id="businessesList"></div>
     </div>
   </section>
@@ -1231,11 +1237,30 @@ async function loadBusinesses() {
   const data = await api('/api/verticals');
   const list = document.getElementById('businessesList');
   list.innerHTML = data.verticals.map((v) => `
-    <div class="vertical-card" onclick="goToBusinessAssets(${v.id})">
-      <div class="icon">${v.logo_path ? `<img src="${v.logo_path}" alt="${esc(v.name)}" style="width:32px;height:32px;object-fit:contain;">` : (v.icon || '🏢')}</div>
-      <div><b>${esc(v.name)}</b><div style="font-size:11px;color:#6b7280;">${esc(v.code)}</div></div>
+    <div class="vertical-card" onclick="goToBusinessAssets(${v.id})" style="justify-content:space-between;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div class="icon">${v.logo_path ? `<img src="${v.logo_path}" alt="${esc(v.name)}" style="width:32px;height:32px;object-fit:contain;">` : (v.icon || '🏢')}</div>
+        <div><b>${esc(v.name)}</b><div style="font-size:11px;color:#6b7280;">${esc(v.code)}</div></div>
+      </div>
+      <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteBusiness(${v.id},'${esc(v.name).replace(/'/g,"\\'")}')">Remove</button>
     </div>
   `).join('');
+}
+
+// Soft-removes a business (sets it inactive server-side) - it disappears
+// from the landing page, dropdowns and this list immediately, but nothing
+// that already references it (assets, scans, users, audit log) is touched
+// or deleted. This is what fixes a botched entry (e.g. someone accidentally
+// pasting a web link into the Icon field instead of using the Logo upload)
+// without needing direct database access.
+async function deleteBusiness(id, name) {
+  if (!confirm(`Remove "${name}" from the list of businesses? This won't delete any of its existing assets or data, it just stops showing up as an active business.`)) return;
+  try {
+    await api(`/api/verticals/${id}`, { method: 'DELETE' });
+    toast('Business removed');
+    await loadVerticals();
+    loadBusinesses();
+  } catch (e) { toast(e.message, false); }
 }
 
 // Clicking a business card jumps straight to that business's assets - flip
@@ -1253,13 +1278,24 @@ async function addBusiness() {
   const name = document.getElementById('newBizName').value.trim();
   const code = document.getElementById('newBizCode').value.trim();
   const icon = document.getElementById('newBizIcon').value.trim();
+  const logoFile = document.getElementById('newBizLogo').files[0];
   if (!name || !code) { toast('Name and code are required', false); return; }
+  // Sent as multipart form data (not JSON) so the logo file, if any, can
+  // ride along in the same request - it becomes this business's real icon
+  // everywhere (landing page, dropdowns, Businesses tab), the same way
+  // AEC Studies/Residency/Pixel already have one.
+  const fd = new FormData();
+  fd.append('name', name);
+  fd.append('code', code);
+  fd.append('icon', icon);
+  if (logoFile) fd.append('logo', logoFile);
   try {
-    await api('/api/verticals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, code, icon }) });
+    await api('/api/verticals', { method: 'POST', body: fd });
     toast('Business added');
     document.getElementById('newBizName').value = '';
     document.getElementById('newBizCode').value = '';
     document.getElementById('newBizIcon').value = '';
+    document.getElementById('newBizLogo').value = '';
     await loadVerticals();
     loadBusinesses();
   } catch (e) { toast(e.message, false); }
