@@ -1,0 +1,163 @@
+const express = require('express');
+const multer = require('multer');
+const { query, logAudit } = require('./db-init');
+const { requireLogin, requireVerticalAdmin, scopeVerticalId } = require('./auth-middleware');
+const router = express.Router();
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 3 * 1024 * 1024 }
+});
+
+function fileToDataUrl(file) {
+  if (!file) return undefined;
+  return `data:${file.mimetype};base64,${file.buffer.toString('base64')}`;
+}
+
+// Purchase Bills ledger. Same access rule as everywhere else: a Vertical
+// Admin only ever sees/touches their OWN business's bills, taken from their
+// session (never the client); Super Admin can see every business, or one
+// at a time via ?vertical_id=. Employees never reach this router at all
+// (requireVerticalAdmin blocks them below).
+router.use(requireLogin, requireVerticalAdmin);
+
+// List bills, oldest first, so the frontend can group them into months in
+// order and keep a running per-month total as it walks the list.
+router.get('/', async (req, res, next) => {
+  try {
+    const myVertical = scopeVerticalId(req);
+    const { vertical_id } = req.query;
+    const clauses = [];
+    const params = [];
+
+    if (myVertical !== null) {
+      params.push(myVertical);
+      clauses.push(`b.vertical_id = $${params.length}`);
+    } else if (vertical_id) {
+      params.push(Number(vertical_id));
+      clauses.push(`b.vertical_id = $${params.length}`);
+    }
+
+    const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+    const { rows } = await query(
+      `SELECT b.*, ve.name AS vertical_name, ve.icon AS vertical_icon FROM bills b
+       JOIN verticals ve ON b.vertical_id = ve.id
+       ${where} ORDER BY b.bill_date ASC, b.id ASC`,
+      params
+    );
+    res.json({ bills: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Add one bill line item. Accepts multipart/form-data so the bill photo
+// (field name "photo") can ride along - stored as a data URL in image_path,
+// same pattern as asset/scan photos. A Super Admin must say which business
+// the bill belongs to; a Vertical Admin's own vertical is used
+// automatically and can't be overridden from the request.
+router.post('/', upload.single('photo'), async (req, res, next) => {
+  try {
+    const user = req.session.user;
+    const {
+      asset_name, vendor_name, quantity, bill_date, expiry_date, amount, remarks,
+      vertical_id: requestedVerticalId
+    } = req.body || {};
+
+    if (!asset_name || !String(asset_name).trim()) return res.status(400).json({ error: 'Product/Asset name is required' });
+    if (!bill_date) return res.status(400).json({ error: 'Bill date is required' });
+    if (amount === undefined || amount === '' || Number.isNaN(Number(amount))) {
+      return res.status(400).json({ error: 'Amount is required' });
+    }
+
+    let vertical_id = user.vertical_id;
+    if (user.role === 'super_admin') {
+      if (!requestedVerticalId) return res.status(400).json({ error: 'Business Vertical is required' });
+      vertical_id = Number(requestedVerticalId);
+    }
+
+    const image_path = fileToDataUrl(req.file) || null;
+    const { rows } = await query(
+      `INSERT INTO bills (vertical_id, asset_name, vendor_name, quantity, bill_date, expiry_date, amount, image_path, remarks, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [
+        vertical_id, String(asset_name).trim(), vendor_name || '', Number(quantity) || 1,
+        bill_date, expiry_date || null, Number(amount), image_path, remarks || '', user.username
+      ]
+    );
+    await logAudit({
+      username: user.username, vertical_id, action: 'Bill Added', ip_address: req.ip, new_value: rows[0]
+    });
+    res.status(201).json({ bill: rows[0] });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Inline-edit autosave: any single field (or several at once) can be
+// updated from the ledger table without a form. Also accepts a replacement
+// photo the same way. Ownership is re-checked here so a Vertical Admin
+// still can't touch another business's bill even by guessing an id.
+router.put('/:id', upload.single('photo'), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const myVertical = scopeVerticalId(req);
+    const { rows: existingRows } = await query('SELECT * FROM bills WHERE id = $1', [id]);
+    if (!existingRows.length) return res.status(404).json({ error: 'Bill not found' });
+    if (myVertical !== null && existingRows[0].vertical_id !== myVertical) {
+      return res.status(403).json({ error: 'This bill belongs to a different business vertical' });
+    }
+
+    const { asset_name, vendor_name, quantity, bill_date, expiry_date, amount, remarks } = req.body || {};
+    const uploadedPhoto = fileToDataUrl(req.file);
+    const fields = [];
+    const params = [];
+    function set(col, val) {
+      params.push(val);
+      fields.push(`${col} = $${params.length}`);
+    }
+    if (asset_name !== undefined) set('asset_name', asset_name);
+    if (vendor_name !== undefined) set('vendor_name', vendor_name);
+    if (quantity !== undefined) set('quantity', quantity === '' || Number.isNaN(Number(quantity)) ? 1 : Number(quantity));
+    if (bill_date !== undefined) set('bill_date', bill_date);
+    if (expiry_date !== undefined) set('expiry_date', expiry_date || null);
+    if (amount !== undefined) set('amount', amount === '' || Number.isNaN(Number(amount)) ? 0 : Number(amount));
+    if (remarks !== undefined) set('remarks', remarks);
+    if (uploadedPhoto !== undefined) set('image_path', uploadedPhoto);
+    if (!fields.length) return res.status(400).json({ error: 'Nothing to update' });
+    fields.push('updated_at = now()');
+
+    params.push(id);
+    const { rows } = await query(`UPDATE bills SET ${fields.join(', ')} WHERE id = $${params.length} RETURNING *`, params);
+    await logAudit({
+      username: req.session.user.username, vertical_id: rows[0].vertical_id, action: 'Bill Updated',
+      ip_address: req.ip, old_value: existingRows[0], new_value: rows[0]
+    });
+    res.json({ bill: rows[0] });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/:id', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const myVertical = scopeVerticalId(req);
+    const { rows: existingRows } = await query('SELECT * FROM bills WHERE id = $1', [id]);
+    if (!existingRows.length) return res.status(404).json({ error: 'Bill not found' });
+    if (myVertical !== null && existingRows[0].vertical_id !== myVertical) {
+      return res.status(403).json({ error: 'This bill belongs to a different business vertical' });
+    }
+
+    await query('DELETE FROM bills WHERE id = $1', [id]);
+    await logAudit({
+      username: req.session.user.username, vertical_id: existingRows[0].vertical_id,
+      action: 'Bill Deleted', ip_address: req.ip, old_value: existingRows[0]
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+module.exports = router;

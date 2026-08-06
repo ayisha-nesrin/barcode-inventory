@@ -1,6 +1,6 @@
 const express = require('express');
 const { query, logAudit } = require('./db-init');
-const { requireLogin } = require('./auth-middleware');
+const { requireLogin, requireSuperAdmin } = require('./auth-middleware');
 const router = express.Router();
 
 router.use(requireLogin);
@@ -39,6 +39,40 @@ router.post('/', async (req, res, next) => {
       new_value: rows[0]
     });
     res.status(201).json({ vendor: rows[0] });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Removing a vendor is Super Admin only, since the vendor master list is
+// shared across every business - a Vertical Admin deleting one could break
+// other businesses' asset records. Blocked outright if any non-deleted
+// asset still references this vendor, so nothing ever ends up pointing at
+// a vendor that no longer exists.
+router.delete('/:id', requireSuperAdmin, async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const { rows: existing } = await query('SELECT * FROM vendors WHERE id = $1', [id]);
+    if (!existing.length) return res.status(404).json({ error: 'Vendor not found' });
+
+    const { rows: inUse } = await query(
+      'SELECT COUNT(*)::int AS count FROM assets WHERE vendor_id = $1 AND deleted_at IS NULL',
+      [id]
+    );
+    if (inUse[0].count > 0) {
+      return res.status(409).json({
+        error: `Cannot remove "${existing[0].name}" - it's still used by ${inUse[0].count} asset(s). Change their vendor first, then try again.`
+      });
+    }
+
+    await query('DELETE FROM vendors WHERE id = $1', [id]);
+    await logAudit({
+      username: req.session.user.username,
+      action: 'Vendor Deleted',
+      ip_address: req.ip,
+      old_value: existing[0]
+    });
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }

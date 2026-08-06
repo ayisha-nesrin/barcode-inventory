@@ -141,6 +141,23 @@
   .movement-list .row:last-child{border-bottom:none;}
 
   .assign-box{background:#f8fafc;border-radius:8px;padding:10px;margin-top:6px;}
+
+  /* Purchase Bills ledger - grouped visually into one block per month. */
+  .bill-month{margin-bottom:18px;}
+  .bill-month-header{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px;padding:6px 2px;border-bottom:2px solid var(--blue);margin-bottom:6px;}
+  .bill-month-header .name{font-weight:800;font-size:14px;color:#111827;}
+  .bill-month-header .total{font-weight:800;font-size:15px;color:var(--blue);}
+  .bill-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:6px;}
+  .bill-row .thumb-link{width:34px;height:34px;border-radius:6px;object-fit:cover;background:#f3f4f6;flex-shrink:0;cursor:pointer;}
+  .bill-field{display:flex;flex-direction:column;gap:2px;min-width:90px;}
+  .bill-field .lbl{font-size:9px;text-transform:uppercase;letter-spacing:.03em;color:#9ca3af;font-weight:700;}
+  .bill-field input{border:1px solid transparent;background:transparent;padding:3px 4px;font-size:13px;border-radius:5px;min-height:auto;font-family:inherit;width:100%;}
+  .bill-field input:hover{background:#f8fafc;}
+  .bill-field input:focus{border-color:var(--blue);background:#fff;outline:none;}
+  .bill-field.name{flex:1 1 140px;}
+  .bill-field.amount input{font-weight:700;color:var(--green);}
+  .bill-row .running{font-size:11px;color:#9ca3af;min-width:70px;text-align:right;}
+  .bill-row .del-btn{background:none;border:none;color:var(--red);font-size:16px;cursor:pointer;padding:4px 6px;flex-shrink:0;}
   .business-table td, .business-table th{white-space:normal;}
 
   .vertical-card{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#f8fafc;border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer;transition:background .12s ease;}
@@ -231,6 +248,7 @@
   <button class="tab-btn" data-tab="assets">Assets</button>
   <button class="tab-btn" data-tab="history">Scan History</button>
   <button class="tab-btn" data-tab="vendors">Vendors</button>
+  <button class="tab-btn" data-tab="bills" id="navBills">Bills</button>
   <button class="tab-btn" data-tab="businesses" id="navBusinesses">Businesses</button>
   <button class="tab-btn" data-tab="users" id="navUsers">Users</button>
   <button class="tab-btn" data-tab="recyclebin" id="navRecycleBin">Recycle Bin</button>
@@ -392,10 +410,43 @@
       <p class="toolbar-hint">Vendors are shared across all businesses. Duplicate names are rejected automatically.</p>
       <div class="table-wrap">
       <table>
-        <thead><tr><th>Vendor</th><th>Added</th></tr></thead>
+        <thead><tr><th>Vendor</th><th>Added</th><th id="vendorActionsHeader" class="hidden">Actions</th></tr></thead>
         <tbody id="vendorsBody"></tbody>
       </table>
       </div>
+    </div>
+  </section>
+
+  <!-- BILLS (Super Admin + that business's own Vertical Admin) -->
+  <section class="tab" id="tab-bills">
+    <div class="panel">
+      <h2>Add Bill <small>One row per product on the bill - purchases only</small></h2>
+      <div class="toolbar">
+        <input type="text" id="billAssetName" placeholder="Product / Asset name" list="billAssetNameList">
+        <datalist id="billAssetNameList"></datalist>
+        <input type="text" id="billVendorName" placeholder="Vendor (optional)">
+        <input type="number" id="billQuantity" placeholder="Qty" value="1" min="0" style="max-width:100px;">
+        <input type="number" id="billAmount" placeholder="Amount" min="0" step="0.01">
+      </div>
+      <div class="toolbar">
+        <input type="date" id="billDate" title="Bill date">
+        <input type="date" id="billExpiryDate" title="Expiry date (optional)">
+        <select id="billVerticalId" class="hidden" style="flex:1 1 180px;"></select>
+      </div>
+      <div class="toolbar">
+        <div style="flex:1 1 100%;">
+          <label style="display:block;font-size:12px;font-weight:600;color:#374151;margin:0 0 5px;">Bill photo (optional)</label>
+          <input type="file" id="billPhoto" accept="image/*">
+        </div>
+        <button class="btn btn-primary btn-block" id="addBillBtn">+ Add Bill</button>
+      </div>
+      <p class="toolbar-hint">Type the product name to match an existing asset (it'll suggest one as you type), or type a new name if it isn't in the system yet.</p>
+    </div>
+
+    <div class="panel">
+      <h2>Purchase Ledger <small>Grouped by month &mdash; click any field to edit, it saves automatically</small></h2>
+      <div id="billsLedger"></div>
+      <div class="empty hidden" id="billsEmpty">No bills logged yet.</div>
     </div>
   </section>
 
@@ -693,9 +744,11 @@ async function init() {
     document.getElementById('assetVerticalFilter').classList.remove('hidden');
     document.getElementById('cbVerticalWrap').classList.remove('hidden');
     document.getElementById('addVerticalWrap').classList.remove('hidden');
+    document.getElementById('billVerticalId').classList.remove('hidden');
     document.getElementById('businessWisePanel').classList.remove('hidden');
     document.getElementById('topUsedPanel').classList.remove('hidden');
     document.getElementById('assetsScopeLabel').textContent = '(all businesses)';
+    document.getElementById('vendorActionsHeader').classList.remove('hidden');
   }
 
   const statusSelect = document.getElementById('assetStatusFilter');
@@ -767,6 +820,7 @@ async function init() {
 
   document.getElementById('globalSearch').addEventListener('input', debounce(runGlobalSearch, 300));
   document.getElementById('addVendorBtn').addEventListener('click', addVendor);
+  document.getElementById('addBillBtn').addEventListener('click', addBill);
 
   if (isSuperAdmin()) {
     document.getElementById('addUserBtn').addEventListener('click', addUser);
@@ -791,6 +845,7 @@ function switchTab(tab) {
   if (tab === 'history') loadHistory();
   if (tab === 'dashboard') loadDashboard();
   if (tab === 'vendors') loadVendors();
+  if (tab === 'bills') loadBills();
   if (tab === 'businesses' && isSuperAdmin()) loadBusinesses();
   if (tab === 'users' && isSuperAdmin()) loadUsers();
   if (tab === 'recyclebin' && isSuperAdmin()) loadRecycleBin();
@@ -801,7 +856,7 @@ function switchTab(tab) {
 async function loadVerticals() {
   const data = await api('/api/verticals');
   verticalsCache = data.verticals;
-  ['cbVertical', 'addVertical', 'assetVerticalFilter', 'newUserVertical', 'auditVertical'].forEach((id) => {
+  ['cbVertical', 'addVertical', 'billVerticalId', 'assetVerticalFilter', 'newUserVertical', 'auditVertical'].forEach((id) => {
     const el = document.getElementById(id);
     if (!el) return;
     const keepFirst = id === 'assetVerticalFilter' || id === 'auditVertical';
@@ -832,12 +887,27 @@ async function loadVendors() {
   const body = document.getElementById('vendorsBody');
   if (body) {
     body.innerHTML = '';
+    const actionsCell = isSuperAdmin()
+      ? (v) => `<td class="actions" data-label="Actions"><button class="btn btn-danger btn-sm" onclick="deleteVendor(${v.id},'${esc(v.name).replace(/'/g,"\\'")}')">Delete</button></td>`
+      : () => '';
     vendorsCache.forEach((v) => {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td data-label="Vendor">${esc(v.name)}</td><td data-label="Added">${new Date(v.created_at).toLocaleDateString()}</td>`;
+      tr.innerHTML = `<td data-label="Vendor">${esc(v.name)}</td><td data-label="Added">${new Date(v.created_at).toLocaleDateString()}</td>${actionsCell(v)}`;
       body.appendChild(tr);
     });
   }
+}
+
+// Super Admin only (enforced server-side too) - blocked automatically if
+// any asset still uses this vendor, so the master list can't be broken out
+// from under existing records.
+async function deleteVendor(id, name) {
+  if (!confirm(`Delete vendor "${name}"? This can't be undone.`)) return;
+  try {
+    await api(`/api/vendors/${id}`, { method: 'DELETE' });
+    toast('Vendor deleted');
+    loadVendors();
+  } catch (e) { toast(e.message, false); }
 }
 
 async function addVendor() {
@@ -851,6 +921,180 @@ async function addVendor() {
   } catch (e) { toast(e.message, false); }
 }
 
+// ---------- BILLS (Purchase Ledger) ----------
+let billsCache = [];
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+function requiredBillVerticalId() {
+  if (!isSuperAdmin()) return undefined;
+  const val = document.getElementById('billVerticalId').value;
+  return val ? Number(val) : undefined;
+}
+
+async function addBill() {
+  const asset_name = document.getElementById('billAssetName').value.trim();
+  const bill_date = document.getElementById('billDate').value;
+  const amount = document.getElementById('billAmount').value;
+  if (!asset_name) { toast('Product / Asset name is required', false); return; }
+  if (!bill_date) { toast('Bill date is required', false); return; }
+  if (amount === '' || Number.isNaN(Number(amount))) { toast('Amount is required', false); return; }
+
+  const vertical_id = requiredBillVerticalId();
+  if (isSuperAdmin() && !vertical_id) { toast('Business Vertical is required', false); return; }
+
+  const fd = new FormData();
+  fd.append('asset_name', asset_name);
+  fd.append('vendor_name', document.getElementById('billVendorName').value.trim());
+  fd.append('quantity', document.getElementById('billQuantity').value || 1);
+  fd.append('bill_date', bill_date);
+  fd.append('expiry_date', document.getElementById('billExpiryDate').value);
+  fd.append('amount', amount);
+  if (vertical_id) fd.append('vertical_id', vertical_id);
+  const photoFile = document.getElementById('billPhoto').files[0];
+  if (photoFile) fd.append('photo', photoFile);
+
+  try {
+    await api('/api/bills', { method: 'POST', body: fd });
+    toast('Bill added');
+    ['billAssetName','billVendorName','billExpiryDate','billPhoto'].forEach((id) => document.getElementById(id).value = '');
+    document.getElementById('billQuantity').value = 1;
+    document.getElementById('billAmount').value = '';
+    loadBills();
+    loadBillsSummaryCard();
+  } catch (e) { toast(e.message, false); }
+}
+
+async function loadBills() {
+  try {
+    const data = await api('/api/bills');
+    billsCache = data.bills || [];
+    renderBillsLedger();
+    // Product-name autosuggest: existing asset names (deduped), so typing
+    // a product on a bill can match what's already in the system, without
+    // locking the field - anything else can still just be typed instead.
+    const namesList = document.getElementById('billAssetNameList');
+    const names = Array.from(new Set(assetsCache.map((a) => a.asset_name)));
+    namesList.innerHTML = names.map((n) => `<option value="${esc(n)}"></option>`).join('');
+  } catch (e) { toast(e.message, false); }
+}
+
+function renderBillsLedger() {
+  const wrap = document.getElementById('billsLedger');
+  document.getElementById('billsEmpty').classList.toggle('hidden', billsCache.length > 0);
+  if (!billsCache.length) { wrap.innerHTML = ''; return; }
+
+  // billsCache arrives sorted oldest-first (see bill-routes.js) so grouping
+  // into consecutive months and keeping a running total as we walk the
+  // list in order works without any extra sorting here.
+  const groups = [];
+  let current = null;
+  billsCache.forEach((b) => {
+    const monthKey = String(b.bill_date).slice(0, 7); // "YYYY-MM"
+    if (!current || current.key !== monthKey) {
+      current = { key: monthKey, rows: [], total: 0 };
+      groups.push(current);
+    }
+    current.total += Number(b.amount) * 1;
+    current.rows.push(b);
+  });
+
+  wrap.innerHTML = groups.map((g) => {
+    const [y, m] = g.key.split('-');
+    const label = `${MONTH_NAMES[Number(m) - 1]} ${y}`;
+    let running = 0;
+    const rowsHtml = g.rows.map((b) => {
+      running += Number(b.amount) * 1;
+      const img = b.image_path
+        ? `<img class="thumb-link" src="${b.image_path}" onclick="window.open('${b.image_path}','_blank')" title="View bill photo">`
+        : `<div class="thumb-empty" style="width:34px;height:34px;flex-shrink:0;"></div>`;
+      const bizChip = isSuperAdmin() ? `<span class="vertical-chip">${b.vertical_icon || ''} ${esc(b.vertical_name)}</span>` : '';
+      return `
+        <div class="bill-row">
+          ${img}
+          <div class="bill-field name">
+            <span class="lbl">Product</span>
+            <input type="text" value="${esc(b.asset_name)}" data-id="${b.id}" data-field="asset_name" onblur="saveBillField(this)" onkeydown="if(event.key==='Enter')this.blur()">
+          </div>
+          <div class="bill-field">
+            <span class="lbl">Vendor</span>
+            <input type="text" value="${esc(b.vendor_name || '')}" data-id="${b.id}" data-field="vendor_name" onblur="saveBillField(this)" onkeydown="if(event.key==='Enter')this.blur()">
+          </div>
+          <div class="bill-field" style="min-width:60px;">
+            <span class="lbl">Qty</span>
+            <input type="number" value="${b.quantity}" data-id="${b.id}" data-field="quantity" onblur="saveBillField(this)" onkeydown="if(event.key==='Enter')this.blur()">
+          </div>
+          <div class="bill-field">
+            <span class="lbl">Bill Date</span>
+            <input type="date" value="${String(b.bill_date).slice(0,10)}" data-id="${b.id}" data-field="bill_date" onchange="saveBillField(this)">
+          </div>
+          <div class="bill-field">
+            <span class="lbl">Expiry</span>
+            <input type="date" value="${b.expiry_date ? String(b.expiry_date).slice(0,10) : ''}" data-id="${b.id}" data-field="expiry_date" onchange="saveBillField(this)">
+          </div>
+          <div class="bill-field amount">
+            <span class="lbl">Amount</span>
+            <input type="number" value="${b.amount}" data-id="${b.id}" data-field="amount" onblur="saveBillField(this)" onkeydown="if(event.key==='Enter')this.blur()">
+          </div>
+          ${bizChip}
+          <div class="running">Running: ${running.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+          <button type="button" class="del-btn" title="Delete this bill row" onclick="deleteBillRow(${b.id})">&times;</button>
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="bill-month">
+        <div class="bill-month-header">
+          <span class="name">${label}</span>
+          <span class="total">Total: ${g.total.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+        </div>
+        ${rowsHtml}
+      </div>`;
+  }).join('');
+}
+
+// Auto-save on blur (text/number fields) or change (date fields) - no
+// separate "Save" button, matches "type and it just saves" behaviour.
+async function saveBillField(el) {
+  const id = el.dataset.id;
+  const field = el.dataset.field;
+  const value = el.value;
+  try {
+    const fd = new FormData();
+    fd.append(field, value);
+    await api(`/api/bills/${id}`, { method: 'PUT', body: fd });
+    if (field === 'amount' || field === 'bill_date') { loadBills(); loadBillsSummaryCard(); }
+  } catch (e) {
+    toast(e.message, false);
+    loadBills(); // revert the field to the real saved value
+  }
+}
+
+async function deleteBillRow(id) {
+  if (!confirm('Delete this bill entry? This cannot be undone.')) return;
+  try {
+    await api(`/api/bills/${id}`, { method: 'DELETE' });
+    toast('Bill deleted');
+    loadBills();
+    loadBillsSummaryCard();
+  } catch (e) { toast(e.message, false); }
+}
+
+// Lightweight fetch just for the dashboard's "Bills" card - shows this
+// calendar month's total spend and links straight to the Bills tab, same
+// click-through pattern as the Low Stock card.
+async function loadBillsSummaryCard() {
+  try {
+    const data = await api('/api/bills');
+    const now = new Date();
+    const thisMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const total = (data.bills || [])
+      .filter((b) => String(b.bill_date).slice(0, 7) === thisMonthKey)
+      .reduce((sum, b) => sum + Number(b.amount), 0);
+    const card = document.getElementById('billsCardValue');
+    if (card) card.textContent = total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  } catch (e) {}
+}
+
 // ---------- DASHBOARD ----------
 async function loadDashboard() {
   const stats = await api('/api/stats');
@@ -861,7 +1105,8 @@ async function loadDashboard() {
     ['Assigned', stats.assignedAssets, ''],
     ['Available', stats.availableAssets, ''],
     ['Low Stock', stats.lowStockAssets, 'warn', 'showLowStockAssets()'],
-    ['Warranty Expiring (30d)', stats.warrantyExpiringAssets, 'warn']
+    ['Warranty Expiring (30d)', stats.warrantyExpiringAssets, 'warn'],
+    ['Bills (This Month)', 0, '', "switchTab('bills')", 'billsCardValue']
   ];
   if (stats.scope === 'vertical') {
     cards.push(['Maintenance', stats.maintenanceAssets, 'warn']);
@@ -872,9 +1117,10 @@ async function loadDashboard() {
     cards.push(['Employees & Admins', stats.totalEmployees, '']);
   }
 
-  grid.innerHTML = cards.map(([label, num, cls, onclick]) => `
-    <div class="stat-card ${cls}${onclick ? ' clickable' : ''}" ${onclick ? `onclick="${onclick}"` : ''}><div class="num">${num ?? 0}</div><div class="label">${label}</div></div>
+  grid.innerHTML = cards.map(([label, num, cls, onclick, id]) => `
+    <div class="stat-card ${cls}${onclick ? ' clickable' : ''}" ${onclick ? `onclick="${onclick}"` : ''}><div class="num" ${id ? `id="${id}"` : ''}>${num ?? 0}</div><div class="label">${label}</div></div>
   `).join('');
+  loadBillsSummaryCard();
 
   if (stats.scope === 'global') {
     const bwBody = document.getElementById('businessWiseBody');

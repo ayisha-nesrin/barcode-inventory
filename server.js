@@ -21,6 +21,7 @@ const verticalRoutes = require('./vertical-routes');
 const vendorRoutes = require('./vendor-routes');
 const auditRoutes = require('./audit-routes');
 const notificationRoutes = require('./notification-routes');
+const billRoutes = require('./bill-routes');
 const { requireCsrf } = require('./csrf-middleware');
 const { generalLimiter } = require('./rate-limit-config');
 
@@ -100,6 +101,7 @@ app.use('/api/verticals', verticalRoutes);
 app.use('/api/vendors', vendorRoutes);
 app.use('/api/audit-logs', auditRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/bills', billRoutes);
 
 // Error handler
 app.use((err, req, res, next) => {

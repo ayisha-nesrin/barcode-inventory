@@ -224,6 +224,30 @@ async function initDB() {
     )
   `);
 
+  // Purchase bills/invoices ledger. One row per line item on a bill (so a
+  // single vendor invoice with 5 products becomes 5 rows here, each still
+  // tagged with the same bill_date so the dashboard/ledger can group and
+  // total them together). Scoped per-vertical like assets - each business
+  // only ever sees its own purchase spend. image_path holds the bill photo
+  // as a data URL, same pattern used for asset/scan photos elsewhere.
+  await query(`
+    CREATE TABLE IF NOT EXISTS bills (
+      id SERIAL PRIMARY KEY,
+      vertical_id INTEGER NOT NULL REFERENCES verticals(id),
+      asset_name TEXT NOT NULL,
+      vendor_name TEXT DEFAULT '',
+      quantity NUMERIC NOT NULL DEFAULT 1,
+      bill_date DATE NOT NULL,
+      expiry_date DATE,
+      amount NUMERIC NOT NULL DEFAULT 0,
+      image_path TEXT,
+      remarks TEXT DEFAULT '',
+      created_by TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
+
   await seed();
   await ensureSuperAdmin();
 }
