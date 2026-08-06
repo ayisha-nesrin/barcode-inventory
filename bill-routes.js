@@ -27,7 +27,7 @@ router.get('/', async (req, res, next) => {
   try {
     const myVertical = scopeVerticalId(req);
     const { vertical_id } = req.query;
-    const clauses = [];
+    const clauses = ['b.deleted_at IS NULL'];
     const params = [];
 
     if (myVertical !== null) {
@@ -38,11 +38,35 @@ router.get('/', async (req, res, next) => {
       clauses.push(`b.vertical_id = $${params.length}`);
     }
 
-    const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+    const where = `WHERE ${clauses.join(' AND ')}`;
     const { rows } = await query(
       `SELECT b.*, ve.name AS vertical_name, ve.icon AS vertical_icon FROM bills b
        JOIN verticals ve ON b.vertical_id = ve.id
        ${where} ORDER BY b.bill_date ASC, b.id ASC`,
+      params
+    );
+    res.json({ bills: rows });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Recycle Bin for bills - same soft-delete pattern as assets: nothing here
+// is ever hard-deleted, just hidden from the normal list above until
+// restored (or left here indefinitely).
+router.get('/recycle-bin', async (req, res, next) => {
+  try {
+    const myVertical = scopeVerticalId(req);
+    const clauses = ['b.deleted_at IS NOT NULL'];
+    const params = [];
+    if (myVertical !== null) {
+      params.push(myVertical);
+      clauses.push(`b.vertical_id = $${params.length}`);
+    }
+    const { rows } = await query(
+      `SELECT b.*, ve.name AS vertical_name, ve.icon AS vertical_icon FROM bills b
+       JOIN verticals ve ON b.vertical_id = ve.id
+       WHERE ${clauses.join(' AND ')} ORDER BY b.deleted_at DESC`,
       params
     );
     res.json({ bills: rows });
@@ -102,7 +126,7 @@ router.put('/:id', upload.single('photo'), async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     const myVertical = scopeVerticalId(req);
-    const { rows: existingRows } = await query('SELECT * FROM bills WHERE id = $1', [id]);
+    const { rows: existingRows } = await query('SELECT * FROM bills WHERE id = $1 AND deleted_at IS NULL', [id]);
     if (!existingRows.length) return res.status(404).json({ error: 'Bill not found' });
     if (myVertical !== null && existingRows[0].vertical_id !== myVertical) {
       return res.status(403).json({ error: 'This bill belongs to a different business vertical' });
@@ -139,22 +163,45 @@ router.put('/:id', upload.single('photo'), async (req, res, next) => {
   }
 });
 
+// Soft delete - moves the bill to the Recycle Bin above rather than
+// erasing it, same as assets elsewhere in the app.
 router.delete('/:id', async (req, res, next) => {
   try {
     const id = Number(req.params.id);
     const myVertical = scopeVerticalId(req);
-    const { rows: existingRows } = await query('SELECT * FROM bills WHERE id = $1', [id]);
+    const { rows: existingRows } = await query('SELECT * FROM bills WHERE id = $1 AND deleted_at IS NULL', [id]);
     if (!existingRows.length) return res.status(404).json({ error: 'Bill not found' });
     if (myVertical !== null && existingRows[0].vertical_id !== myVertical) {
       return res.status(403).json({ error: 'This bill belongs to a different business vertical' });
     }
 
-    await query('DELETE FROM bills WHERE id = $1', [id]);
+    const { rows } = await query('UPDATE bills SET deleted_at = now() WHERE id = $1 RETURNING *', [id]);
     await logAudit({
       username: req.session.user.username, vertical_id: existingRows[0].vertical_id,
-      action: 'Bill Deleted', ip_address: req.ip, old_value: existingRows[0]
+      action: 'Bill Moved to Recycle Bin', ip_address: req.ip, old_value: existingRows[0]
     });
-    res.json({ ok: true });
+    res.json({ ok: true, bill: rows[0] });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/:id/restore', async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const myVertical = scopeVerticalId(req);
+    const { rows: existingRows } = await query('SELECT * FROM bills WHERE id = $1 AND deleted_at IS NOT NULL', [id]);
+    if (!existingRows.length) return res.status(404).json({ error: 'Bill not found in Recycle Bin' });
+    if (myVertical !== null && existingRows[0].vertical_id !== myVertical) {
+      return res.status(403).json({ error: 'This bill belongs to a different business vertical' });
+    }
+
+    const { rows } = await query('UPDATE bills SET deleted_at = NULL WHERE id = $1 RETURNING *', [id]);
+    await logAudit({
+      username: req.session.user.username, vertical_id: rows[0].vertical_id,
+      action: 'Bill Restored', ip_address: req.ip, new_value: rows[0]
+    });
+    res.json({ ok: true, bill: rows[0] });
   } catch (err) {
     next(err);
   }

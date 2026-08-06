@@ -223,9 +223,19 @@
     .modal{max-height:calc(100dvh - 16px);padding:16px;}
     .stats{grid-template-columns:repeat(4, 1fr);}
   }
+
+  /* Light AEC Group logo watermark behind the whole admin panel - fixed to
+     the viewport (not the page) so it stays put while everything scrolls,
+     and sits at z-index 0 behind header/nav/panels, which all have their
+     own solid backgrounds already, so it only actually shows through in
+     the page's own background (the grey gaps around cards/panels) rather
+     than fighting with any text or data on top of it. */
+  .aec-watermark{position:fixed;inset:0;z-index:0;pointer-events:none;background:url('data:image/jpeg;base64,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') center center no-repeat;background-size:min(60vw,420px);opacity:.07;}
+  header, nav, main{position:relative;z-index:1;}
 </style>
 </head>
 <body>
+<div class="aec-watermark"></div>
 <header>
   <div>
     <div class="title">AEC Group &mdash; Asset Management</div>
@@ -348,7 +358,7 @@
     <div class="panel">
       <h2>Assets <small id="assetsScopeLabel"></small></h2>
       <div class="toolbar-hint hidden" id="lowStockBanner" style="background:#fef3c7;color:#92400e;padding:8px 10px;border-radius:7px;margin-bottom:10px;font-weight:600;">
-        Showing only Low Stock items. <a href="#" onclick="clearLowStockFilter();return false;" style="color:#1a56db;font-weight:700;">Show all assets</a>
+        <span id="assetFilterText">Showing only Low Stock items.</span> <a href="#" onclick="clearAssetFilter();return false;" style="color:#1a56db;font-weight:700;">Show all assets</a>
       </div>
       <div class="toolbar">
         <input type="text" id="assetSearch" placeholder="Search barcode, name, serial, vendor...">
@@ -445,8 +455,20 @@
 
     <div class="panel">
       <h2>Purchase Ledger <small>Grouped by month &mdash; click any field to edit, it saves automatically</small></h2>
+      <div class="toolbar">
+        <button class="btn btn-secondary" onclick="window.open('/api/export/bills.xlsx')">Excel</button>
+        <button class="btn btn-secondary" onclick="window.open('/api/export/bills.pdf')">PDF</button>
+        <button class="btn btn-secondary" onclick="window.open('/api/export/bills.csv')">CSV</button>
+        <button class="btn btn-secondary" onclick="printBillsLedger()">Print</button>
+      </div>
       <div id="billsLedger"></div>
       <div class="empty hidden" id="billsEmpty">No bills logged yet.</div>
+    </div>
+
+    <div class="panel">
+      <h2>Bills Recycle Bin <small>Deleted bills land here &mdash; restore or leave in place, nothing is ever permanently erased</small></h2>
+      <div id="billsRecycleBin"></div>
+      <div class="empty hidden" id="billsRecycleBinEmpty">Bills Recycle Bin is empty.</div>
     </div>
   </section>
 
@@ -795,9 +817,13 @@ async function init() {
   // email/Outlook connection, which is a separate setup step).
   setInterval(loadNotifications, 30 * 60 * 1000);
 
-  document.getElementById('assetSearch').addEventListener('input', debounce(() => loadAssets(), 300));
-  document.getElementById('assetStatusFilter').addEventListener('change', loadAssets);
-  document.getElementById('assetVerticalFilter').addEventListener('change', loadAssets);
+  function clearSpecialFilterQuietly() {
+    specialAssetFilter = null;
+    document.getElementById('lowStockBanner').classList.add('hidden');
+  }
+  document.getElementById('assetSearch').addEventListener('input', debounce(() => { clearSpecialFilterQuietly(); loadAssets(); }, 300));
+  document.getElementById('assetStatusFilter').addEventListener('change', () => { clearSpecialFilterQuietly(); loadAssets(); });
+  document.getElementById('assetVerticalFilter').addEventListener('change', () => { clearSpecialFilterQuietly(); loadAssets(); });
   document.getElementById('addAssetBtn').addEventListener('click', () => openAddModal());
   document.getElementById('applyHistoryFilter').addEventListener('click', loadHistory);
 
@@ -969,6 +995,7 @@ async function loadBills() {
     const data = await api('/api/bills');
     billsCache = data.bills || [];
     renderBillsLedger();
+    loadBillsRecycleBin();
     // Product-name autosuggest: existing asset names (deduped), so typing
     // a product on a bill can match what's already in the system, without
     // locking the field - anything else can still just be typed instead.
@@ -1070,13 +1097,77 @@ async function saveBillField(el) {
 }
 
 async function deleteBillRow(id) {
-  if (!confirm('Delete this bill entry? This cannot be undone.')) return;
+  if (!confirm('Move this bill to the Recycle Bin?')) return;
   try {
     await api(`/api/bills/${id}`, { method: 'DELETE' });
-    toast('Bill deleted');
+    toast('Bill moved to Recycle Bin');
     loadBills();
     loadBillsSummaryCard();
   } catch (e) { toast(e.message, false); }
+}
+
+async function loadBillsRecycleBin() {
+  try {
+    const data = await api('/api/bills/recycle-bin');
+    const bills = data.bills || [];
+    const wrap = document.getElementById('billsRecycleBin');
+    document.getElementById('billsRecycleBinEmpty').classList.toggle('hidden', bills.length > 0);
+    wrap.innerHTML = bills.map((b) => {
+      const bizChip = isSuperAdmin() ? `<span class="vertical-chip">${b.vertical_icon || ''} ${esc(b.vertical_name)}</span>` : '';
+      return `
+        <div class="bill-row">
+          <div class="bill-field name"><span class="lbl">Product</span><div>${esc(b.asset_name)}</div></div>
+          <div class="bill-field"><span class="lbl">Bill Date</span><div>${String(b.bill_date).slice(0,10)}</div></div>
+          <div class="bill-field"><span class="lbl">Amount</span><div>${Number(b.amount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</div></div>
+          ${bizChip}
+          <button type="button" class="btn btn-success btn-sm" onclick="restoreBillRow(${b.id})">Restore</button>
+        </div>`;
+    }).join('');
+  } catch (e) { toast(e.message, false); }
+}
+
+async function restoreBillRow(id) {
+  try {
+    await api(`/api/bills/${id}/restore`, { method: 'POST' });
+    toast('Bill restored');
+    loadBills();
+    loadBillsRecycleBin();
+    loadBillsSummaryCard();
+  } catch (e) { toast(e.message, false); }
+}
+
+// Simple print view: opens a new window with the currently-loaded ledger
+// (same month grouping/totals already on screen) and triggers the
+// browser's print dialog - same pattern used for barcode labels elsewhere.
+function printBillsLedger() {
+  const w = window.open('', '_blank');
+  const rows = billsCache.map((b) => `
+    <tr>
+      <td>${esc(String(b.bill_date).slice(0,10))}</td>
+      <td>${esc(b.asset_name)}</td>
+      <td>${esc(b.vendor_name || '-')}</td>
+      <td>${b.quantity}</td>
+      <td style="text-align:right;">${Number(b.amount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+    </tr>`).join('');
+  const total = billsCache.reduce((s, b) => s + Number(b.amount), 0);
+  w.document.write(`
+    <html><head><title>AEC Group - Purchase Bills Ledger</title></head>
+    <body style="font-family:sans-serif;padding:24px;">
+      <h2 style="margin-bottom:4px;">AEC Group &mdash; Purchase Bills Ledger</h2>
+      <p style="color:#555;margin-top:0;">Printed ${new Date().toLocaleString()}</p>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead><tr style="text-align:left;border-bottom:2px solid #111;">
+          <th style="padding:6px 8px;">Bill Date</th><th style="padding:6px 8px;">Product</th>
+          <th style="padding:6px 8px;">Vendor</th><th style="padding:6px 8px;">Qty</th>
+          <th style="padding:6px 8px;text-align:right;">Amount</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <h3 style="text-align:right;margin-top:16px;">Grand Total: ${total.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</h3>
+    </body></html>
+  `);
+  w.document.close();
+  setTimeout(() => w.print(), 300);
 }
 
 // Lightweight fetch just for the dashboard's "Bills" card - shows this
@@ -1101,20 +1192,20 @@ async function loadDashboard() {
   const grid = document.getElementById('statsGrid');
 
   const cards = [
-    ['Total Assets', stats.totalAssets, ''],
-    ['Assigned', stats.assignedAssets, ''],
-    ['Available', stats.availableAssets, ''],
-    ['Low Stock', stats.lowStockAssets, 'warn', 'showLowStockAssets()'],
-    ['Warranty Expiring (30d)', stats.warrantyExpiringAssets, 'warn'],
+    ['Total Assets', stats.totalAssets, '', 'applySpecialAssetFilter(null)'],
+    ['Assigned', stats.assignedAssets, '', "applySpecialAssetFilter({type:'status',value:'Assigned',label:'Showing only Assigned items.'})"],
+    ['Available', stats.availableAssets, '', "applySpecialAssetFilter({type:'status',value:'Available',label:'Showing only Available items.'})"],
+    ['Low Stock', stats.lowStockAssets, 'warn', "applySpecialAssetFilter({type:'low_stock',label:'Showing only Low Stock items.'})"],
+    ['Warranty Expiring (30d)', stats.warrantyExpiringAssets, 'warn', "applySpecialAssetFilter({type:'warranty_expiring',label:'Showing items with warranty expiring within 30 days.'})"],
     ['Bills (This Month)', 0, '', "switchTab('bills')", 'billsCardValue']
   ];
   if (stats.scope === 'vertical') {
-    cards.push(['Maintenance', stats.maintenanceAssets, 'warn']);
-    cards.push(['Lost', stats.lostAssets, 'danger']);
-    cards.push(['Scrapped', stats.scrappedAssets, 'danger']);
-    cards.push(['Total Quantity', stats.totalQuantity, '']);
+    cards.push(['Maintenance', stats.maintenanceAssets, 'warn', "applySpecialAssetFilter({type:'status',value:'Maintenance,Repair',label:'Showing Maintenance/Repair items.'})"]);
+    cards.push(['Lost', stats.lostAssets, 'danger', "applySpecialAssetFilter({type:'status',value:'Lost',label:'Showing only Lost items.'})"]);
+    cards.push(['Scrapped', stats.scrappedAssets, 'danger', "applySpecialAssetFilter({type:'status',value:'Scrapped,Disposed',label:'Showing Scrapped/Disposed items.'})"]);
+    cards.push(['Total Quantity', stats.totalQuantity, '', 'applySpecialAssetFilter(null)']);
   } else {
-    cards.push(['Employees & Admins', stats.totalEmployees, '']);
+    cards.push(['Employees & Admins', stats.totalEmployees, '', "switchTab('users')"]);
   }
 
   grid.innerHTML = cards.map(([label, num, cls, onclick, id]) => `
@@ -1159,24 +1250,32 @@ function statusChip(status) {
   return `<span class="status-chip status-${status}">${esc(status)}</span>`;
 }
 
-let lowStockFilterActive = false;
+// Every clickable dashboard stat card (Low Stock, Warranty Expiring,
+// Assigned, Available, Maintenance, Lost, Scrapped, ...) goes through this
+// one mechanism: jump to the Assets tab with a "special" filter active that
+// the plain search/status/vertical dropdowns can't express on their own
+// (low stock, warranty window, or several statuses at once like
+// Maintenance+Repair). null means no special filter - a plain "show me
+// everything" card like Total Assets.
+let specialAssetFilter = null;
 
-// The "Low Stock" dashboard card links here: jump to the Assets tab already
-// filtered down to just the items at/below the low-stock threshold, instead
-// of the user having to go find them manually.
-function showLowStockAssets() {
-  lowStockFilterActive = true;
+function applySpecialAssetFilter(filter) {
+  specialAssetFilter = filter;
   switchTab('assets');
   document.getElementById('assetSearch').value = '';
   document.getElementById('assetStatusFilter').value = '';
   if (isSuperAdmin()) document.getElementById('assetVerticalFilter').value = '';
-  document.getElementById('lowStockBanner').classList.remove('hidden');
+  const banner = document.getElementById('lowStockBanner');
+  if (filter) {
+    document.getElementById('assetFilterText').textContent = filter.label;
+    banner.classList.remove('hidden');
+  } else {
+    banner.classList.add('hidden');
+  }
   loadAssets();
 }
-function clearLowStockFilter() {
-  lowStockFilterActive = false;
-  document.getElementById('lowStockBanner').classList.add('hidden');
-  loadAssets();
+function clearAssetFilter() {
+  applySpecialAssetFilter(null);
 }
 
 async function loadAssets(overrideVerticalId) {
@@ -1187,7 +1286,11 @@ async function loadAssets(overrideVerticalId) {
   if (q) params.set('q', q);
   if (status) params.set('status', status);
   if (vertical_id) params.set('vertical_id', vertical_id);
-  if (lowStockFilterActive) params.set('low_stock', 'true');
+  if (specialAssetFilter) {
+    if (specialAssetFilter.type === 'low_stock') params.set('low_stock', 'true');
+    else if (specialAssetFilter.type === 'warranty_expiring') params.set('warranty_expiring', 'true');
+    else if (specialAssetFilter.type === 'status') params.set('status', specialAssetFilter.value);
+  }
 
   const data = await api('/api/assets?' + params.toString());
   assetsCache = data.assets;
@@ -1579,6 +1682,8 @@ async function deleteBusiness(id, name) {
 // reload the list scoped to it (Super Admin only feature, since only they
 // see multiple businesses at once).
 function goToBusinessAssets(verticalId) {
+  specialAssetFilter = null;
+  document.getElementById('lowStockBanner').classList.add('hidden');
   switchTab('assets');
   const filter = document.getElementById('assetVerticalFilter');
   if (filter) filter.value = verticalId;

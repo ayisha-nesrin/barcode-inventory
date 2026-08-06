@@ -243,10 +243,15 @@ async function initDB() {
       image_path TEXT,
       remarks TEXT DEFAULT '',
       created_by TEXT,
+      deleted_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `);
+  // Safety net in case "bills" already existed on your database from an
+  // earlier deploy of this feature, before the Recycle Bin support column
+  // was added - same pattern used for the legacy scans/users tables.
+  await query(`ALTER TABLE bills ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`);
 
   await seed();
   await ensureSuperAdmin();

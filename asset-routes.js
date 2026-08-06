@@ -5,6 +5,23 @@ const router = express.Router();
 
 router.use(requireLogin);
 
+// Same IST "today" helpers used in stats-routes.js/notification-routes.js -
+// duplicated locally (rather than imported) since this file has no other
+// dependency on those route files and it's a tiny, self-contained bit of
+// date math.
+function todayIST() {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(new Date()).reduce((acc, p) => { acc[p.type] = p.value; return acc; }, {});
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+function addDays(dateStr, days) {
+  const d = new Date(dateStr + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 const SELECT_BASE = `
   SELECT a.*, v.name AS vendor_name,
          ve.code AS vertical_code, ve.name AS vertical_name, ve.icon AS vertical_icon
@@ -58,7 +75,7 @@ async function assertSerialNumberFree(serial_number, excludeId, auditContext) {
 router.get('/', async (req, res, next) => {
   try {
     const myVertical = scopeVerticalId(req);
-    const { q, status, category, department, vertical_id, assigned_employee, low_stock } = req.query;
+    const { q, status, category, department, vertical_id, assigned_employee, low_stock, warranty_expiring } = req.query;
     const clauses = ['a.deleted_at IS NULL'];
     const params = [];
 
@@ -79,8 +96,13 @@ router.get('/', async (req, res, next) => {
       );
     }
     if (status) {
-      params.push(status);
-      clauses.push(`a.status = $${params.length}`);
+      // Accepts either one status ("Assigned") or a comma-separated list
+      // ("Maintenance,Repair") - the dashboard's Maintenance/Scrapped cards
+      // count two statuses together, so clicking them needs to filter on
+      // both at once rather than just the first one.
+      const statusList = String(status).split(',').map((s) => s.trim()).filter(Boolean);
+      const placeholders = statusList.map((s) => { params.push(s); return `$${params.length}`; });
+      clauses.push(`a.status IN (${placeholders.join(',')})`);
     }
     if (category) {
       params.push(category);
@@ -99,6 +121,18 @@ router.get('/', async (req, res, next) => {
       // notifications feed (stats-routes.js / notification-routes.js) -
       // clicking that card links here so the definition has to match.
       clauses.push(`a.quantity > 0 AND a.quantity <= 5`);
+    }
+    if (warranty_expiring === 'true' || warranty_expiring === '1') {
+      // Same 30-day IST window as the dashboard's "Warranty Expiring" card
+      // and stats-routes.js - computed in JS rather than CURRENT_DATE so it
+      // lines up with the same IST "today" the rest of the app uses.
+      const today = todayIST();
+      const in30 = addDays(today, 30);
+      params.push(today);
+      const p1 = `$${params.length}`;
+      params.push(in30);
+      const p2 = `$${params.length}`;
+      clauses.push(`a.warranty_expiry IS NOT NULL AND a.warranty_expiry >= ${p1} AND a.warranty_expiry <= ${p2}`);
     }
 
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';

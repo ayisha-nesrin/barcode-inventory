@@ -2,7 +2,7 @@ const express = require('express');
 const ExcelJS = require('exceljs');
 const PDFDocument = require('pdfkit');
 const { query } = require('./db-init');
-const { requireLogin, scopeVerticalId } = require('./auth-middleware');
+const { requireLogin, requireVerticalAdmin, scopeVerticalId } = require('./auth-middleware');
 const router = express.Router();
 
 router.use(requireLogin);
@@ -33,6 +33,22 @@ async function fetchScans(req) {
     where = `WHERE vertical_id = $${params.length}`;
   }
   const { rows } = await query(`SELECT * FROM scans ${where} ORDER BY id ASC`, params);
+  return rows;
+}
+
+async function fetchBills(req) {
+  const myVertical = scopeVerticalId(req);
+  const params = [];
+  let where = 'WHERE b.deleted_at IS NULL';
+  if (myVertical !== null) {
+    params.push(myVertical);
+    where += ` AND b.vertical_id = $${params.length}`;
+  }
+  const { rows } = await query(
+    `SELECT b.*, ve.name AS vertical_name FROM bills b JOIN verticals ve ON b.vertical_id = ve.id
+     ${where} ORDER BY b.bill_date ASC, b.id ASC`,
+    params
+  );
   return rows;
 }
 
@@ -73,6 +89,16 @@ const SCAN_COLUMNS = [
   { header: 'Assigned Employee', key: 'assigned_employee', width: 18 },
   { header: 'Scanned By', key: 'scanned_by', width: 14 },
   { header: 'Device', key: 'device_name', width: 22 },
+  { header: 'Remarks', key: 'remarks', width: 22 }
+];
+const BILL_COLUMNS = [
+  { header: 'Bill Date', key: 'bill_date', width: 14 },
+  { header: 'Product / Asset', key: 'asset_name', width: 26 },
+  { header: 'Business', key: 'vertical_name', width: 16 },
+  { header: 'Vendor', key: 'vendor_name', width: 16 },
+  { header: 'Qty', key: 'quantity', width: 8 },
+  { header: 'Amount', key: 'amount', width: 12 },
+  { header: 'Expiry', key: 'expiry_date', width: 14 },
   { header: 'Remarks', key: 'remarks', width: 22 }
 ];
 
@@ -129,6 +155,67 @@ router.get('/scans.csv', async (req, res, next) => {
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename="scan-history.csv"');
     res.send(csv);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Bills exports are Super Admin + Vertical Admin only (requireVerticalAdmin
+// added on top of the router-wide requireLogin), unlike the asset/scan
+// exports above which any logged-in role can use - matches the same access
+// rule as the Bills tab itself and its API routes (bill-routes.js).
+router.get('/bills.xlsx', requireVerticalAdmin, async (req, res, next) => {
+  try {
+    const rows = await fetchBills(req);
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Bills');
+    sheet.columns = BILL_COLUMNS;
+    sheet.getRow(1).font = { bold: true };
+    rows.forEach((b) => sheet.addRow(b));
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="bills.xlsx"');
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/bills.csv', requireVerticalAdmin, async (req, res, next) => {
+  try {
+    const rows = await fetchBills(req);
+    const csv = toCSV(BILL_COLUMNS.map((c) => c.header), BILL_COLUMNS.map((c) => c.key), rows);
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="bills.csv"');
+    res.send(csv);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/bills.pdf', requireVerticalAdmin, async (req, res, next) => {
+  try {
+    const rows = await fetchBills(req);
+    const doc = new PDFDocument({ margin: 30, size: 'A4', layout: 'landscape' });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="bills.pdf"');
+    doc.pipe(res);
+
+    const colX = [30, 110, 310, 440, 570, 630, 700];
+    const colW = [75, 195, 125, 125, 55, 65, 95];
+    let total = 0;
+    rows.forEach((b) => { total += Number(b.amount); });
+    drawTable(
+      doc,
+      `AEC Group - Purchase Bills Ledger (Total: ${total.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})})`,
+      ['Bill Date', 'Product', 'Business', 'Vendor', 'Qty', 'Amount', 'Expiry'],
+      colX,
+      colW,
+      rows,
+      (b) => [b.bill_date, b.asset_name, b.vertical_name, b.vendor_name, b.quantity, b.amount, b.expiry_date || '-']
+    );
+
+    doc.end();
   } catch (err) {
     next(err);
   }
