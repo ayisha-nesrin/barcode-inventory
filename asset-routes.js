@@ -58,7 +58,7 @@ async function assertSerialNumberFree(serial_number, excludeId, auditContext) {
 router.get('/', async (req, res, next) => {
   try {
     const myVertical = scopeVerticalId(req);
-    const { q, status, category, department, vertical_id, assigned_employee } = req.query;
+    const { q, status, category, department, vertical_id, assigned_employee, low_stock } = req.query;
     const clauses = ['a.deleted_at IS NULL'];
     const params = [];
 
@@ -93,6 +93,12 @@ router.get('/', async (req, res, next) => {
     if (assigned_employee) {
       params.push(assigned_employee);
       clauses.push(`a.assigned_employee = $${params.length}`);
+    }
+    if (low_stock === 'true' || low_stock === '1') {
+      // Same threshold as the dashboard's "Low Stock" stat card and the
+      // notifications feed (stats-routes.js / notification-routes.js) -
+      // clicking that card links here so the definition has to match.
+      clauses.push(`a.quantity > 0 AND a.quantity <= 5`);
     }
 
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';

@@ -46,6 +46,9 @@
   .stat-card .label{font-size:11px;color:#6b7280;margin-top:4px;}
   .stat-card.warn .num{color:var(--amber);}
   .stat-card.danger .num{color:var(--red);}
+  .stat-card.clickable{cursor:pointer;transition:transform .1s ease,box-shadow .1s ease;touch-action:manipulation;}
+  .stat-card.clickable:hover{box-shadow:0 4px 14px rgba(0,0,0,.1);}
+  .stat-card.clickable:active{transform:scale(.97);}
 
   .panel{background:#fff;border-radius:12px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,.05);margin-bottom:16px;max-width:100%;}
   .panel h2{margin:0 0 12px;font-size:15px;}
@@ -120,6 +123,15 @@
   .field-hint{font-size:11px;color:#9ca3af;margin-top:3px;}
   .required-mark{color:var(--red);}
   .barcode-current{display:flex;align-items:center;justify-content:space-between;gap:8px;background:#f8fafc;padding:9px 10px;border-radius:7px;margin-bottom:6px;flex-wrap:wrap;}
+
+  /* Compact inline +/- stepper shown on every row of the Assets table
+     (right next to the Qty number), separate from the bigger .qty-control
+     used inside the Edit modal. Kept green per request so it's visually
+     distinct from the row's other buttons. */
+  .qty-inline{display:inline-flex;align-items:center;gap:6px;}
+  .qty-inline button{width:26px;height:26px;line-height:1;border-radius:6px;border:none;background:var(--green);color:#fff;font-size:15px;font-weight:800;cursor:pointer;touch-action:manipulation;flex-shrink:0;}
+  .qty-inline button:disabled{opacity:.4;cursor:not-allowed;}
+  .qty-inline span{min-width:22px;text-align:center;font-weight:700;}
 
   .qty-control{display:flex;align-items:center;gap:8px;}
   .qty-control button{width:44px;height:44px;border-radius:8px;border:none;background:#e5e7eb;font-size:20px;font-weight:700;cursor:pointer;}
@@ -317,6 +329,9 @@
   <section class="tab" id="tab-assets">
     <div class="panel">
       <h2>Assets <small id="assetsScopeLabel"></small></h2>
+      <div class="toolbar-hint hidden" id="lowStockBanner" style="background:#fef3c7;color:#92400e;padding:8px 10px;border-radius:7px;margin-bottom:10px;font-weight:600;">
+        Showing only Low Stock items. <a href="#" onclick="clearLowStockFilter();return false;" style="color:#1a56db;font-weight:700;">Show all assets</a>
+      </div>
       <div class="toolbar">
         <input type="text" id="assetSearch" placeholder="Search barcode, name, serial, vendor...">
         <select id="assetStatusFilter">
@@ -719,6 +734,13 @@ async function init() {
   loadDashboard();
   loadAssets();
   loadNotifications();
+  // Keep re-checking every 30 minutes for as long as the dashboard tab
+  // stays open, so an urgent (<=2 days) warranty item keeps surfacing a
+  // toast until it's resolved, not just the one time the page was loaded.
+  // Note: this only works while the browser tab is open - it does not send
+  // an email or push notification if the app is closed (that would need an
+  // email/Outlook connection, which is a separate setup step).
+  setInterval(loadNotifications, 30 * 60 * 1000);
 
   document.getElementById('assetSearch').addEventListener('input', debounce(() => loadAssets(), 300));
   document.getElementById('assetStatusFilter').addEventListener('change', loadAssets);
@@ -838,7 +860,7 @@ async function loadDashboard() {
     ['Total Assets', stats.totalAssets, ''],
     ['Assigned', stats.assignedAssets, ''],
     ['Available', stats.availableAssets, ''],
-    ['Low Stock', stats.lowStockAssets, 'warn'],
+    ['Low Stock', stats.lowStockAssets, 'warn', 'showLowStockAssets()'],
     ['Warranty Expiring (30d)', stats.warrantyExpiringAssets, 'warn']
   ];
   if (stats.scope === 'vertical') {
@@ -850,8 +872,8 @@ async function loadDashboard() {
     cards.push(['Employees & Admins', stats.totalEmployees, '']);
   }
 
-  grid.innerHTML = cards.map(([label, num, cls]) => `
-    <div class="stat-card ${cls}"><div class="num">${num ?? 0}</div><div class="label">${label}</div></div>
+  grid.innerHTML = cards.map(([label, num, cls, onclick]) => `
+    <div class="stat-card ${cls}${onclick ? ' clickable' : ''}" ${onclick ? `onclick="${onclick}"` : ''}><div class="num">${num ?? 0}</div><div class="label">${label}</div></div>
   `).join('');
 
   if (stats.scope === 'global') {
@@ -891,6 +913,26 @@ function statusChip(status) {
   return `<span class="status-chip status-${status}">${esc(status)}</span>`;
 }
 
+let lowStockFilterActive = false;
+
+// The "Low Stock" dashboard card links here: jump to the Assets tab already
+// filtered down to just the items at/below the low-stock threshold, instead
+// of the user having to go find them manually.
+function showLowStockAssets() {
+  lowStockFilterActive = true;
+  switchTab('assets');
+  document.getElementById('assetSearch').value = '';
+  document.getElementById('assetStatusFilter').value = '';
+  if (isSuperAdmin()) document.getElementById('assetVerticalFilter').value = '';
+  document.getElementById('lowStockBanner').classList.remove('hidden');
+  loadAssets();
+}
+function clearLowStockFilter() {
+  lowStockFilterActive = false;
+  document.getElementById('lowStockBanner').classList.add('hidden');
+  loadAssets();
+}
+
 async function loadAssets(overrideVerticalId) {
   const q = document.getElementById('assetSearch').value.trim();
   const status = document.getElementById('assetStatusFilter').value;
@@ -899,6 +941,7 @@ async function loadAssets(overrideVerticalId) {
   if (q) params.set('q', q);
   if (status) params.set('status', status);
   if (vertical_id) params.set('vertical_id', vertical_id);
+  if (lowStockFilterActive) params.set('low_stock', 'true');
 
   const data = await api('/api/assets?' + params.toString());
   assetsCache = data.assets;
@@ -916,7 +959,13 @@ async function loadAssets(overrideVerticalId) {
       <td data-label="Category">${esc(a.category || '-')}</td>
       <td data-label="Vendor">${esc(a.vendor_name || '-')}</td>
       <td data-label="Serial No." style="font-family:monospace">${esc(a.serial_number)}</td>
-      <td data-label="Qty">${a.quantity}</td>
+      <td data-label="Qty">
+        <div class="qty-inline">
+          <button type="button" onclick="quickAdjustQty(${a.id},-1)" ${a.quantity <= 0 ? 'disabled' : ''}>&minus;</button>
+          <span>${a.quantity}</span>
+          <button type="button" onclick="quickAdjustQty(${a.id},1)">+</button>
+        </div>
+      </td>
       <td data-label="Status">${statusChip(a.status)}</td>
       <td data-label="Employee">${esc(a.assigned_employee || '-')}</td>
       <td class="actions">
@@ -926,6 +975,22 @@ async function loadAssets(overrideVerticalId) {
     body.appendChild(tr);
   });
   document.getElementById('assetsEmpty').classList.toggle('hidden', data.assets.length > 0);
+}
+
+// Lets stock be added/used straight from the Assets list (the same +/-
+// stepper that's inside the Edit modal, just available without opening it)
+// - reuses the existing quantity-movements endpoint so it's still logged
+// and shows up in that asset's movement history either way.
+async function quickAdjustQty(id, delta) {
+  try {
+    await api(`/api/assets/${id}/quantity`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ delta, reason: delta > 0 ? 'Quick add (Assets list)' : 'Quick use (Assets list)' })
+    });
+    loadAssets();
+    loadDashboard();
+  } catch (e) { toast(e.message, false); }
 }
 
 function requiredVerticalIdFor(selectId) {
@@ -1527,6 +1592,11 @@ function toggleNotifPanel() {
   if (wasHidden) loadNotifications();
 }
 
+// Called on load, whenever the bell is opened, AND automatically every 30
+// minutes while the dashboard stays open (see the setInterval in init()).
+// Nothing is stored - it's the same live query every time - so as soon as
+// whatever made an item "urgent" (warranty within 2 days) stops being true,
+// the nagging just stops on its own on the next check.
 async function loadNotifications() {
   try {
     const data = await api('/api/notifications');
@@ -1534,6 +1604,11 @@ async function loadNotifications() {
     const n = data.count || 0;
     countEl.textContent = n > 99 ? '99+' : String(n);
     countEl.classList.toggle('hidden', n === 0);
+
+    const urgentOnes = (data.notifications || []).filter((x) => x.type === 'warranty_urgent');
+    if (urgentOnes.length) {
+      toast(`⚠ ${urgentOnes.length} item(s) with warranty expiring within 2 days - check Notifications`, false);
+    }
 
     const list = document.getElementById('notifList');
     if (!data.notifications || data.notifications.length === 0) {
