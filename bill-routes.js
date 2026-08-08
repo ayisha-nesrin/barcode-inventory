@@ -2,6 +2,7 @@ const express = require('express');
 const multer = require('multer');
 const { query, logAudit } = require('./db-init');
 const { requireLogin, requireVerticalAdmin, scopeVerticalId } = require('./auth-middleware');
+const { analyzeBillImage, isConfigured: aiConfigured } = require('./azure-invoice');
 const router = express.Router();
 
 const upload = multer({
@@ -71,6 +72,37 @@ router.get('/recycle-bin', async (req, res, next) => {
     );
     res.json({ bills: rows });
   } catch (err) {
+    next(err);
+  }
+});
+
+// Lets the frontend know whether the "Scan Bill (AI)" button should even
+// be shown - true only once AZURE_DOCINTEL_ENDPOINT/KEY are set on the
+// server, so nobody sees a button that would just error out.
+router.get('/ai-status', (req, res) => {
+  res.json({ configured: aiConfigured() });
+});
+
+// Reads a bill photo/PDF with Azure AI Document Intelligence and returns a
+// DRAFT (not saved to the database yet) - one entry per product line item
+// found on the bill, each with a confidence score per field so the review
+// screen can flag anything uncertain instead of silently trusting it. The
+// user reviews/corrects this draft in the UI, then each line gets POSTed
+// to the normal POST / route below exactly like a manually typed bill.
+router.post('/scan-ai', upload.single('photo'), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No bill image/PDF uploaded' });
+    const draft = await analyzeBillImage(req.file.buffer, req.file.mimetype);
+    await logAudit({
+      username: req.session.user.username,
+      vertical_id: req.session.user.vertical_id,
+      action: 'Bill Scanned (AI)',
+      ip_address: req.ip,
+      new_value: { vendor_name: draft.vendor_name, line_item_count: draft.line_items.length }
+    });
+    res.json({ draft });
+  } catch (err) {
+    if (err.code === 'AI_NOT_CONFIGURED') return res.status(503).json({ error: err.message });
     next(err);
   }
 });

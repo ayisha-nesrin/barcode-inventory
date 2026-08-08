@@ -158,6 +158,19 @@
   .bill-field.amount input{font-weight:700;color:var(--green);}
   .bill-row .running{font-size:11px;color:#9ca3af;min-width:70px;text-align:right;}
   .bill-row .del-btn{background:none;border:none;color:var(--red);font-size:16px;cursor:pointer;padding:4px 6px;flex-shrink:0;}
+
+  /* AI bill-review rows - same idea as .bill-row but each field is a full
+     labelled input (this is a review/edit screen, not a compact ledger
+     line), and low-confidence fields get an orange border so nothing
+     uncertain slips through unnoticed. */
+  .ai-item-row{display:grid;grid-template-columns:1fr;gap:8px;align-items:end;background:#f8fafc;border-radius:8px;padding:10px;margin-bottom:8px;}
+  @media (min-width: 641px) {
+    .ai-item-row{grid-template-columns:1fr 90px 110px auto;}
+  }
+  .ai-item-row label{font-size:11px;font-weight:600;color:#6b7280;margin:0 0 3px;display:block;}
+  .ai-item-row input{width:100%;}
+  .ai-item-row input.low-confidence{border-color:var(--amber);background:#fffbeb;}
+  .ai-item-row .remove-row{background:none;border:none;color:var(--red);font-size:18px;cursor:pointer;height:44px;}
   .business-table td, .business-table th{white-space:normal;}
 
   .vertical-card{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#f8fafc;border-radius:8px;padding:10px;margin-bottom:8px;cursor:pointer;transition:background .12s ease;}
@@ -429,11 +442,20 @@
 
   <!-- BILLS (Super Admin + that business's own Vertical Admin) -->
   <section class="tab" id="tab-bills">
+    <div class="panel hidden" id="scanBillAiPanel">
+      <h2>Scan Bill (AI) <small>Upload a photo/PDF of the bill - it reads the details for you</small></h2>
+      <div class="toolbar">
+        <input type="file" id="aiScanBillPhoto" accept="image/*,application/pdf" style="flex:1 1 220px;">
+        <button class="btn btn-primary" id="aiScanBillBtn">Scan &amp; Extract</button>
+      </div>
+      <p class="toolbar-hint" id="aiScanBillHint">You'll get a chance to review and correct everything before it's saved.</p>
+    </div>
+
     <div class="panel">
       <h2>Add Bill <small>One row per product on the bill - purchases only</small></h2>
       <div class="toolbar">
-        <input type="text" id="billAssetName" placeholder="Product / Asset name" list="billAssetNameList">
-        <datalist id="billAssetNameList"></datalist>
+        <input type="text" id="billAssetName" placeholder="Product / Asset name" list="productNamesList">
+        <datalist id="productNamesList"></datalist>
         <input type="text" id="billVendorName" placeholder="Vendor (optional)">
         <input type="number" id="billQuantity" placeholder="Qty" value="1" min="0" style="max-width:100px;">
         <input type="number" id="billAmount" placeholder="Amount" min="0" step="0.01">
@@ -617,7 +639,7 @@
     <h3>Create Barcode</h3>
     <div id="createBarcodeForm">
       <div class="form-grid">
-        <div><label>Asset Name <span class="required-mark">*</span></label><input type="text" id="cbName"></div>
+        <div><label>Asset Name <span class="required-mark">*</span></label><input type="text" id="cbName" list="productNamesList"></div>
         <div class="hidden" id="cbVerticalWrap">
           <label>Business Vertical <span class="required-mark">*</span></label>
           <select id="cbVertical"></select>
@@ -664,7 +686,7 @@
     <h3>Add Asset</h3>
     <div class="form-grid">
       <div><label>Barcode <span class="required-mark">*</span></label><input type="text" id="addBarcode"></div>
-      <div><label>Asset Name <span class="required-mark">*</span></label><input type="text" id="addName"></div>
+      <div><label>Asset Name <span class="required-mark">*</span></label><input type="text" id="addName" list="productNamesList"></div>
       <div class="hidden" id="addVerticalWrap">
         <label>Business Vertical <span class="required-mark">*</span></label>
         <select id="addVertical"></select>
@@ -686,6 +708,24 @@
     <div class="modal-actions">
       <button class="btn btn-success" id="saveAddBtn" style="flex:1;">Save</button>
       <button class="btn btn-secondary" id="cancelAddBtn" style="flex:1;">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Scan Bill (AI) Review Modal -->
+<div class="overlay hidden" id="aiReviewOverlay">
+  <div class="modal wide">
+    <h3>Review Scanned Bill</h3>
+    <p class="toolbar-hint">Fields highlighted in orange were read with low confidence &mdash; please double check them. Nothing is saved until you click "Save to Ledger" below.</p>
+    <div class="form-grid">
+      <div><label>Vendor</label><input type="text" id="aiVendorName"></div>
+      <div><label>Bill Date</label><input type="date" id="aiBillDate"></div>
+    </div>
+    <div id="aiLineItems"></div>
+    <button class="btn btn-secondary btn-sm" type="button" onclick="addAiLineItemRow()" style="margin-top:8px;">+ Add Another Product</button>
+    <div class="modal-actions">
+      <button class="btn btn-success" id="saveAiReviewBtn" style="flex:1;">Save to Ledger</button>
+      <button class="btn btn-secondary" id="cancelAiReviewBtn" style="flex:1;">Cancel</button>
     </div>
   </div>
 </div>
@@ -809,6 +849,10 @@ async function init() {
   loadDashboard();
   loadAssets();
   loadNotifications();
+  // Loaded eagerly (not just when the Bills tab is opened) so the product
+  // name suggestions on Create Barcode/Add Asset already include bill
+  // names from the very first screen, not only after visiting Bills once.
+  loadBills();
   // Keep re-checking every 30 minutes for as long as the dashboard tab
   // stays open, so an urgent (<=2 days) warranty item keeps surfacing a
   // toast until it's resolved, not just the one time the page was loaded.
@@ -847,6 +891,9 @@ async function init() {
   document.getElementById('globalSearch').addEventListener('input', debounce(runGlobalSearch, 300));
   document.getElementById('addVendorBtn').addEventListener('click', addVendor);
   document.getElementById('addBillBtn').addEventListener('click', addBill);
+  document.getElementById('aiScanBillBtn').addEventListener('click', scanBillWithAi);
+  document.getElementById('cancelAiReviewBtn').addEventListener('click', closeAiReview);
+  document.getElementById('saveAiReviewBtn').addEventListener('click', saveAiReview);
 
   if (isSuperAdmin()) {
     document.getElementById('addUserBtn').addEventListener('click', addUser);
@@ -871,7 +918,7 @@ function switchTab(tab) {
   if (tab === 'history') loadHistory();
   if (tab === 'dashboard') loadDashboard();
   if (tab === 'vendors') loadVendors();
-  if (tab === 'bills') loadBills();
+  if (tab === 'bills') { loadBills(); checkAiStatus(); }
   if (tab === 'businesses' && isSuperAdmin()) loadBusinesses();
   if (tab === 'users' && isSuperAdmin()) loadUsers();
   if (tab === 'recyclebin' && isSuperAdmin()) loadRecycleBin();
@@ -957,6 +1004,125 @@ function requiredBillVerticalId() {
   return val ? Number(val) : undefined;
 }
 
+// ---------- SCAN BILL (AI) ----------
+const AI_LOW_CONFIDENCE = 0.7; // keep in sync with azure-invoice.js
+let lastScannedBillFile = null; // re-attached to every line item saved from one scan
+
+// Checks once whether the server has Azure credentials configured, and
+// only then reveals the "Scan Bill (AI)" panel - otherwise a button that
+// can't work would just be confusing.
+async function checkAiStatus() {
+  try {
+    const data = await api('/api/bills/ai-status');
+    document.getElementById('scanBillAiPanel').classList.toggle('hidden', !data.configured);
+  } catch (e) {
+    document.getElementById('scanBillAiPanel').classList.add('hidden');
+  }
+}
+
+async function scanBillWithAi() {
+  const file = document.getElementById('aiScanBillPhoto').files[0];
+  if (!file) { toast('Choose a bill photo or PDF first', false); return; }
+  lastScannedBillFile = file;
+
+  const btn = document.getElementById('aiScanBillBtn');
+  btn.disabled = true;
+  btn.textContent = 'Reading bill...';
+  try {
+    const fd = new FormData();
+    fd.append('photo', file);
+    const data = await api('/api/bills/scan-ai', { method: 'POST', body: fd });
+    openAiReview(data.draft);
+  } catch (e) {
+    toast(e.message, false);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Scan & Extract';
+  }
+}
+
+function openAiReview(draft) {
+  document.getElementById('aiVendorName').value = draft.vendor_name || '';
+  document.getElementById('aiBillDate').value = draft.bill_date || '';
+  document.getElementById('aiLineItems').innerHTML = '';
+  (draft.line_items || []).forEach((item) => addAiLineItemRow(item));
+  if (!draft.line_items || !draft.line_items.length) addAiLineItemRow();
+  document.getElementById('aiReviewOverlay').classList.remove('hidden');
+}
+
+function closeAiReview() {
+  document.getElementById('aiReviewOverlay').classList.add('hidden');
+  document.getElementById('aiScanBillPhoto').value = '';
+}
+
+// Adds one editable row to the review screen. Called once per line item
+// Azure found (pre-filled, with low-confidence fields highlighted), and
+// also by the "+ Add Another Product" button for anything the AI missed
+// (in which case item is undefined and the row starts blank).
+function addAiLineItemRow(item) {
+  const wrap = document.getElementById('aiLineItems');
+  const row = document.createElement('div');
+  row.className = 'ai-item-row';
+  const conf = (item && item.confidence) || {};
+  const nameLow = conf.asset_name !== undefined && conf.asset_name < AI_LOW_CONFIDENCE;
+  const amountLow = conf.amount !== undefined && conf.amount < AI_LOW_CONFIDENCE;
+  row.innerHTML = `
+    <div>
+      <label>Product</label>
+      <input type="text" class="ai-name ${nameLow ? 'low-confidence' : ''}" list="productNamesList" value="${esc(item ? item.asset_name : '')}" placeholder="Product name">
+    </div>
+    <div>
+      <label>Qty</label>
+      <input type="number" class="ai-qty" min="0" value="${item ? item.quantity : 1}">
+    </div>
+    <div>
+      <label>Amount</label>
+      <input type="number" class="ai-amount ${amountLow ? 'low-confidence' : ''}" min="0" step="0.01" value="${item && item.amount != null ? item.amount : ''}">
+    </div>
+    <button type="button" class="remove-row" title="Remove this line" onclick="this.closest('.ai-item-row').remove()">&times;</button>
+  `;
+  wrap.appendChild(row);
+}
+
+async function saveAiReview() {
+  const vendor_name = document.getElementById('aiVendorName').value.trim();
+  const bill_date = document.getElementById('aiBillDate').value;
+  if (!bill_date) { toast('Bill date is required', false); return; }
+
+  const vertical_id = requiredBillVerticalId();
+  if (isSuperAdmin() && !vertical_id) { toast('Business Vertical is required - pick one below in "Add Bill" first', false); return; }
+
+  const rows = Array.from(document.querySelectorAll('#aiLineItems .ai-item-row'));
+  const validRows = rows.filter((r) => r.querySelector('.ai-name').value.trim());
+  if (!validRows.length) { toast('At least one product with a name is required', false); return; }
+
+  const btn = document.getElementById('saveAiReviewBtn');
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+  try {
+    for (const row of validRows) {
+      const fd = new FormData();
+      fd.append('asset_name', row.querySelector('.ai-name').value.trim());
+      fd.append('vendor_name', vendor_name);
+      fd.append('quantity', row.querySelector('.ai-qty').value || 1);
+      fd.append('bill_date', bill_date);
+      fd.append('amount', row.querySelector('.ai-amount').value || 0);
+      if (vertical_id) fd.append('vertical_id', vertical_id);
+      if (lastScannedBillFile) fd.append('photo', lastScannedBillFile);
+      await api('/api/bills', { method: 'POST', body: fd });
+    }
+    toast(`${validRows.length} bill line(s) saved to the ledger`);
+    closeAiReview();
+    loadBills();
+    loadBillsSummaryCard();
+  } catch (e) {
+    toast(e.message, false);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save to Ledger';
+  }
+}
+
 async function addBill() {
   const asset_name = document.getElementById('billAssetName').value.trim();
   const bill_date = document.getElementById('billDate').value;
@@ -996,13 +1162,24 @@ async function loadBills() {
     billsCache = data.bills || [];
     renderBillsLedger();
     loadBillsRecycleBin();
-    // Product-name autosuggest: existing asset names (deduped), so typing
-    // a product on a bill can match what's already in the system, without
-    // locking the field - anything else can still just be typed instead.
-    const namesList = document.getElementById('billAssetNameList');
-    const names = Array.from(new Set(assetsCache.map((a) => a.asset_name)));
-    namesList.innerHTML = names.map((n) => `<option value="${esc(n)}"></option>`).join('');
+    refreshProductNamesList();
   } catch (e) { toast(e.message, false); }
+}
+
+// Shared product-name autosuggest, used on the bill entry field AND on the
+// Create Barcode / Add Asset name fields (see their `list=` attributes) -
+// combines names already in Assets with names that have shown up on Bills,
+// so scanning a barcode for something you already logged on a bill can
+// match the exact same spelling instead of retyping it slightly
+// differently. Doesn't lock the field - anything else can still be typed.
+function refreshProductNamesList() {
+  const namesList = document.getElementById('productNamesList');
+  if (!namesList) return;
+  const names = Array.from(new Set([
+    ...assetsCache.map((a) => a.asset_name),
+    ...billsCache.map((b) => b.asset_name)
+  ].filter(Boolean)));
+  namesList.innerHTML = names.map((n) => `<option value="${esc(n)}"></option>`).join('');
 }
 
 function renderBillsLedger() {
@@ -1324,6 +1501,7 @@ async function loadAssets(overrideVerticalId) {
     body.appendChild(tr);
   });
   document.getElementById('assetsEmpty').classList.toggle('hidden', data.assets.length > 0);
+  refreshProductNamesList();
 }
 
 // Lets stock be added/used straight from the Assets list (the same +/-
