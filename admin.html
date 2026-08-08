@@ -448,7 +448,7 @@
         <input type="file" id="aiScanBillPhoto" accept="image/*,application/pdf" style="flex:1 1 220px;">
         <button class="btn btn-primary" id="aiScanBillBtn">Scan &amp; Extract</button>
       </div>
-      <p class="toolbar-hint" id="aiScanBillHint">You'll get a chance to review and correct everything before it's saved.</p>
+      <p class="toolbar-hint" id="aiScanBillHint">Clear bills save straight to the ledger automatically. Anything unclear opens for a quick review first.</p>
     </div>
 
     <div class="panel">
@@ -1032,12 +1032,72 @@ async function scanBillWithAi() {
     const fd = new FormData();
     fd.append('photo', file);
     const data = await api('/api/bills/scan-ai', { method: 'POST', body: fd });
-    openAiReview(data.draft);
+    if (canAutoSaveDraft(data.draft)) {
+      await autoSaveScannedBill(data.draft);
+    } else {
+      openAiReview(data.draft);
+    }
   } catch (e) {
     toast(e.message, false);
   } finally {
     btn.disabled = false;
     btn.textContent = 'Scan & Extract';
+  }
+}
+
+// True only when EVERY field Azure returned is confident enough to trust
+// without a human glancing at it: vendor, bill date, and each line item's
+// product name + amount. A required field that's simply missing (e.g. no
+// date found at all) also fails this check, since there's nothing safe to
+// auto-save. Super Admins additionally need a business already picked in
+// the "Add Bill" panel above - auto-save can't guess which business a
+// scanned bill belongs to, so that case always falls back to review.
+function canAutoSaveDraft(draft) {
+  if (!draft) return false;
+  if (isSuperAdmin() && !requiredBillVerticalId()) return false;
+
+  const T = AI_LOW_CONFIDENCE;
+  if (!draft.bill_date) return false;
+  if (draft.bill_date_confidence !== undefined && draft.bill_date_confidence < T) return false;
+  if (draft.vendor_name && draft.vendor_confidence !== undefined && draft.vendor_confidence < T) return false;
+  if (!draft.line_items || !draft.line_items.length) return false;
+
+  return draft.line_items.every((item) => {
+    if (!item.asset_name || !String(item.asset_name).trim()) return false;
+    if (item.amount === null || item.amount === undefined || item.amount === '') return false;
+    const c = item.confidence || {};
+    if (c.asset_name !== undefined && c.asset_name < T) return false;
+    if (c.amount !== undefined && c.amount < T) return false;
+    return true;
+  });
+}
+
+// Saves every line item straight to the ledger with no review step - only
+// ever called after canAutoSaveDraft() has confirmed everything is
+// high-confidence. If the save itself fails partway (network issue, a
+// field the server rejects, etc.) it falls back to the manual review
+// screen so nothing scanned is silently lost.
+async function autoSaveScannedBill(draft) {
+  const vertical_id = requiredBillVerticalId();
+  try {
+    for (const item of draft.line_items) {
+      const fd = new FormData();
+      fd.append('asset_name', String(item.asset_name).trim());
+      fd.append('vendor_name', draft.vendor_name || '');
+      fd.append('quantity', item.quantity || 1);
+      fd.append('bill_date', draft.bill_date);
+      fd.append('amount', item.amount || 0);
+      if (vertical_id) fd.append('vertical_id', vertical_id);
+      if (lastScannedBillFile) fd.append('photo', lastScannedBillFile);
+      await api('/api/bills', { method: 'POST', body: fd });
+    }
+    toast(`Bill read with high confidence - ${draft.line_items.length} item(s) saved automatically`);
+    document.getElementById('aiScanBillPhoto').value = '';
+    loadBills();
+    loadBillsSummaryCard();
+  } catch (e) {
+    toast(e.message + ' - opening for manual review instead', false);
+    openAiReview(draft);
   }
 }
 
